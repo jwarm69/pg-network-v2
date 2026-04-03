@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #0D0D0D;
+  --color-foreground: #F5F5F5;
+  --color-card: #1A1A1A;
+  --color-input: #242424;
+  --color-border: #2a2a2a;
+  --color-border-light: #333333;
+  --color-muted: #666666;
+  --color-secondary: #999999;
+  --color-primary: #FD3300;
+  --color-primary-hover: #e52e00;
+  --color-success: #00C853;
+  --color-warning: #FFB300;
+  --color-info: #2196F3;
+  --color-danger: #FF3D00;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Toast slide-in animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Stat pulse animation */
+@keyframes statPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+.animate-stat-pulse {
+  animation: statPulse 0.4s ease-in-out;
+}
