@@ -36,6 +36,17 @@ interface QueueTarget {
   priority: string;
 }
 
+interface ContactPathInfo {
+  type: string;
+  name: string;
+  role: string;
+  email: string | null;
+  channel: string;
+  confidence: "high" | "medium" | "low";
+  source_url: string | null;
+  handle?: string | null;
+}
+
 interface Dossier {
   bio: string;
   golfConnection: string;
@@ -45,6 +56,7 @@ interface Dossier {
   sources: string[];
   partnershipAngle?: string;
   riskFlags?: string[];
+  contactPaths?: ContactPathInfo[];
 }
 
 interface ResearchField {
@@ -537,6 +549,7 @@ function DossierView({
             riskFlags: fieldMap.risk_flags
               ? fieldMap.risk_flags.split("; ").filter(Boolean)
               : [],
+            contactPaths: data.contactPaths || [],
           });
         }
       } catch {
@@ -575,6 +588,60 @@ function DossierView({
       <DossierSection label="Recent Activity" value={dossier.recentActivity} />
       {dossier.partnershipAngle && (
         <DossierSection label="Partnership Angle" value={dossier.partnershipAngle} />
+      )}
+      {dossier.contactPaths && dossier.contactPaths.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-2">
+            Contact Routes
+          </p>
+          <div className="space-y-2">
+            {dossier.contactPaths.map((cp, i) => (
+              <div key={i} className="bg-surface rounded-lg px-3 py-2 border border-border">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {cp.type === "direct" ? "Direct" : cp.type === "agent" ? "Agent/Rep" : "Wildcard"}
+                  </span>
+                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                    cp.confidence === "high" ? "bg-success/20 text-success" :
+                    cp.confidence === "medium" ? "bg-warning/20 text-warning" :
+                    "bg-muted/20 text-muted"
+                  }`}>
+                    {cp.confidence}
+                  </span>
+                </div>
+                <p className="text-xs font-medium">{cp.name}</p>
+                {cp.role && <p className="text-[10px] text-muted">{cp.role}</p>}
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                  {cp.channel && (
+                    <span className="text-[10px] text-muted">
+                      <span className="font-semibold">Channel:</span> {cp.channel}
+                    </span>
+                  )}
+                  {cp.email && (
+                    <span className="text-[10px] text-primary">
+                      {cp.email}
+                    </span>
+                  )}
+                  {cp.handle && (
+                    <span className="text-[10px] text-primary">
+                      {cp.handle}
+                    </span>
+                  )}
+                </div>
+                {cp.source_url && (
+                  <a
+                    href={cp.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[9px] text-primary/60 hover:underline flex items-center gap-1 mt-1 truncate"
+                  >
+                    <ExternalLink size={7} /> source
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
       {dossier.riskFlags && dossier.riskFlags.length > 0 && (
         <div>

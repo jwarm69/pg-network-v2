@@ -451,6 +451,30 @@ export async function getContactPaths(targetId: string): Promise<ContactPath[]> 
   return result.rows as unknown as ContactPath[];
 }
 
+export async function deleteContactPaths(targetId: string): Promise<void> {
+  await ensureSchema();
+  const db = getClient();
+  await db.execute({ sql: "DELETE FROM contact_paths WHERE target_id = ?", args: [targetId] });
+}
+
+export async function insertContactPaths(
+  targetId: string,
+  paths: Omit<ContactPath, "id" | "target_id">[]
+): Promise<void> {
+  await ensureSchema();
+  const db = getClient();
+  for (const p of paths) {
+    await db.execute({
+      sql: `INSERT INTO contact_paths (id, target_id, type, name, role, email, channel, confidence, source_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        crypto.randomUUID(), targetId, p.type, p.name, p.role,
+        p.email, p.channel, p.confidence, p.source_url,
+      ],
+    });
+  }
+}
+
 export async function getActivity(limit = 50, targetId?: string): Promise<ActivityEntry[]> {
   await ensureSchema();
   const db = getClient();

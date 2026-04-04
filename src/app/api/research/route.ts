@@ -4,8 +4,12 @@ import {
   getTarget,
   updateTarget,
   getResearch,
+  getContactPaths,
   deleteResearch,
   insertResearchRows,
+  deleteContactPaths,
+  insertContactPaths,
+  type ContactPath,
 } from "@/lib/db";
 import { searchPerplexity, isPerplexityConfigured } from "@/lib/perplexity";
 import { askClaude } from "@/lib/claude";
@@ -28,7 +32,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const data = await getResearch(targetId);
-    return NextResponse.json({ fields: data });
+    const contactPaths = await getContactPaths(targetId);
+    return NextResponse.json({ fields: data, contactPaths });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -230,67 +235,86 @@ async function handleTargetResearch(targetId: string) {
     return NextResponse.json(mock);
   }
 
-  // Run multiple searches in parallel (keep queries under 400 chars for Tavily)
+  // Run all searches in parallel (keep queries under 400 chars for Tavily)
   const name = targetName.slice(0, 80);
-  const [bioResult, golfResult, contactResult, activityResult, reachResult] =
+  const [bioResult, golfResult, activityResult, reachResult, directContactResult, agentResult, wildcardResult] =
     await Promise.all([
-      searchPerplexity(
-        `${name} bio career highlights current projects`
-      ),
-      searchPerplexity(
-        `${name} golf connection partnerships golf events`
-      ),
-      searchPerplexity(
-        `${name} agent manager management contact brand partnerships`
-      ),
-      searchPerplexity(
-        `${name} recent news social media appearances 2025 2026`
-      ),
-      searchPerplexity(
-        `${name} social media following Instagram Twitter YouTube TikTok`
-      ),
+      searchPerplexity(`${name} bio career highlights current projects`),
+      searchPerplexity(`${name} golf connection partnerships golf events`),
+      searchPerplexity(`${name} recent news social media appearances 2025 2026`),
+      searchPerplexity(`${name} social media following Instagram Twitter YouTube TikTok`),
+      // Contact path searches
+      searchPerplexity(`${name} Instagram handle LinkedIn profile personal website`),
+      searchPerplexity(`${name} agent manager talent agency booking representative email`),
+      searchPerplexity(`${name} charity board member golf club membership mutual connections`),
     ]);
 
-  // Synthesize with Claude
+  // Synthesize dossier + contact paths with Claude
   const synthesisPrompt = `You are building a research dossier for a potential brand partnership target for Performance Golf.
 
 Target: ${targetName} (type: ${targetType})
 
-Here is the raw research:
+Raw research:
 
-BIO RESEARCH:
-${bioResult}
+BIO: ${bioResult}
+GOLF CONNECTION: ${golfResult}
+RECENT ACTIVITY: ${activityResult}
+SOCIAL REACH: ${reachResult}
+DIRECT CONTACT (social/website): ${directContactResult}
+AGENT/REPRESENTATIVE: ${agentResult}
+WILDCARD ROUTES (charities, clubs, mutual connections): ${wildcardResult}
 
-GOLF CONNECTION:
-${golfResult}
+Return a JSON object with these fields. Be concise and factual. If unavailable, say "UNKNOWN — [what manual research is needed]".
 
-CONTACT/MANAGEMENT INTEL:
-${contactResult}
+{
+  "bio": "2-3 sentence bio",
+  "golfConnection": "their relationship to golf",
+  "reach": "follower counts, audience metrics",
+  "contactIntel": "summary of best contact approach",
+  "recentActivity": "what they've been up to lately",
+  "sources": ["url1", "url2"],
+  "partnershipAngle": "why good fit for Performance Golf",
+  "riskFlags": ["concern1"],
+  "contactPaths": [
+    {
+      "type": "direct",
+      "name": "${targetName}",
+      "role": "Target",
+      "email": "email or null",
+      "channel": "instagram or linkedin or website",
+      "confidence": "high or medium or low",
+      "source_url": "url where found or null",
+      "handle": "social handle if applicable"
+    },
+    {
+      "type": "agent",
+      "name": "Agent/manager name",
+      "role": "Agent at Agency Name",
+      "email": "booking email or null",
+      "channel": "email",
+      "confidence": "high or medium or low",
+      "source_url": "url or null",
+      "handle": null
+    },
+    {
+      "type": "wildcard",
+      "name": "Name of mutual connection or org",
+      "role": "Board member / Club / Mutual friend / Podcast host",
+      "email": null,
+      "channel": "the channel or context",
+      "confidence": "low or medium",
+      "source_url": "url or null",
+      "handle": null
+    }
+  ]
+}
 
-RECENT ACTIVITY:
-${activityResult}
-
-SOCIAL REACH:
-${reachResult}
-
-Synthesize this into a structured dossier with these sections. Be concise and factual. If information is unavailable, say "UNKNOWN — [what manual research is needed]".
-
-Return a JSON object with these fields:
-- bio: string (2-3 sentences)
-- golfConnection: string (their relationship to golf)
-- reach: string (follower counts, audience metrics)
-- contactIntel: string (agent/manager info, best contact path)
-- recentActivity: string (what they've been up to lately)
-- sources: string[] (any URLs or publications referenced)
-- partnershipAngle: string (why this would be a good fit for Performance Golf)
-- riskFlags: string[] (any concerns — controversies, refusal of brand deals, etc.)
-
-Return ONLY valid JSON, no other text.`;
+Include ALL 3 contact path types (direct, agent, wildcard) even if confidence is low. Return ONLY valid JSON.`;
 
   let dossier;
   try {
     const synthesized = await askClaude(synthesisPrompt, {
-      maxTokens: 2048,
+      maxTokens: 3072,
       temperature: 0.3,
     });
     dossier = JSON.parse(synthesized);
@@ -299,11 +323,12 @@ Return ONLY valid JSON, no other text.`;
       bio: bioResult.slice(0, 300),
       golfConnection: golfResult.slice(0, 300),
       reach: reachResult.slice(0, 300),
-      contactIntel: contactResult.slice(0, 300),
+      contactIntel: `Direct: ${directContactResult.slice(0, 150)} | Agent: ${agentResult.slice(0, 150)}`,
       recentActivity: activityResult.slice(0, 300),
       sources: [],
       partnershipAngle: "Could not synthesize — review raw research above.",
       riskFlags: [],
+      contactPaths: [],
     };
   }
 
@@ -325,6 +350,24 @@ Return ONLY valid JSON, no other text.`;
 
   if (isDbConfigured()) {
     await saveResearchRows(targetId, researchFields);
+
+    // Save structured contact paths
+    if (Array.isArray(dossier.contactPaths) && dossier.contactPaths.length > 0) {
+      await deleteContactPaths(targetId);
+      const paths: Omit<ContactPath, "id" | "target_id">[] = dossier.contactPaths.map(
+        (cp: { type: string; name: string; role: string; email?: string; channel: string; confidence?: string; source_url?: string }) => ({
+          type: cp.type || "direct",
+          name: cp.name || "Unknown",
+          role: cp.role || "",
+          email: cp.email || null,
+          channel: cp.channel || "",
+          confidence: (cp.confidence as "high" | "medium" | "low") || "low",
+          source_url: cp.source_url || null,
+        })
+      );
+      await insertContactPaths(targetId, paths);
+    }
+
     await updateTarget(targetId, { status: "researched" } as Partial<import("@/lib/db").Target>);
   }
 
@@ -333,6 +376,7 @@ Return ONLY valid JSON, no other text.`;
     mock: false,
     dossier,
     researchFields,
+    contactPaths: dossier.contactPaths || [],
   });
 }
 
