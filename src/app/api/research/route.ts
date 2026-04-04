@@ -162,44 +162,61 @@ async function handleDiscovery(query: string) {
     );
   }
 
-  // Use Claude to structure the raw search results
+  // Use Claude to extract individual people/podcasts/brands from search results
   let results;
   const hasClaudeKey = !!process.env.ANTHROPIC_API_KEY;
 
   if (hasClaudeKey) {
     try {
-      const structurePrompt = `Parse the following search results into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
+      const structurePrompt = `You are extracting individual people, podcasts, or brands from search results for a golf networking CRM.
 
-Search results:
+The user searched for: "${query}"
+
+Here are the raw search results:
 ${rawResult}
 
-Return ONLY valid JSON array, no other text.`;
+Extract 3-5 SPECIFIC, NAMED individuals, podcasts, or brands mentioned in these results. For each one, provide:
+- name: Their actual name (a real person, podcast, or brand — NEVER "Search Results" or generic labels)
+- description: 1-2 sentence description based on the search data
+- relevance: "high", "medium", or "low" for a golf brand partnership
+- golfConnection: Their specific connection to golf
+- estimatedReach: Social media following or audience size if mentioned, otherwise "Unknown"
+
+If the search results don't mention specific names, infer the most likely matches based on the query.
+
+Return ONLY a valid JSON array, no markdown, no code fences, no other text.`;
 
       const structured = await askClaude(structurePrompt, {
-        system: "You are a JSON parser. Return only valid JSON arrays.",
-        maxTokens: 1024,
-        temperature: 0,
+        system: "Extract named entities from search results. Return only a JSON array. Never use generic names like 'Search Results'.",
+        maxTokens: 2048,
+        temperature: 0.2,
       });
 
-      results = JSON.parse(structured);
+      const cleaned = structured.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+
+      // Validate: make sure results have real names
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].name && parsed[0].name !== "Search Results") {
+        results = parsed;
+      } else {
+        results = null;
+      }
     } catch (err) {
       console.error("Claude parse error:", err);
-      // Fall through to raw result fallback
       results = null;
     }
   }
 
   if (!results) {
-    // Fallback: return raw search as a single result
-    results = [
-      {
-        name: "Search Results",
-        description: rawResult.slice(0, 500),
-        relevance: "medium" as const,
-        golfConnection: "See description",
-        estimatedReach: "Unknown",
-      },
-    ];
+    // Fallback without Claude: try to extract names from raw text
+    // Return error instead of a fake "Search Results" entry
+    return NextResponse.json({
+      mode: "discover",
+      mock: false,
+      results: [],
+      rawPreview: rawResult.slice(0, 800),
+      error: "Could not extract individual targets from search results. Try a more specific query like a person's name or podcast name.",
+    });
   }
 
   return NextResponse.json({
