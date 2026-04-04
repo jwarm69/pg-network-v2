@@ -226,13 +226,13 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="w-full pl-8 pr-3 py-2 text-sm bg-input border border-border rounded-lg outline-none focus:border-primary transition-colors"
+            className="w-full pl-8 pr-3 py-3 md:py-2 text-sm bg-input border border-border rounded-lg outline-none focus:border-primary transition-colors"
           />
         </div>
         <button
           onClick={handleSearch}
           disabled={searching}
-          className="px-3 py-2 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
+          className="px-5 md:px-3 py-3 md:py-2 text-sm md:text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
         >
           {searching ? <Loader2 size={14} className="animate-spin" /> : "Go"}
         </button>
@@ -449,7 +449,7 @@ function DiscoveryCard({
       <button
         onClick={onAdd}
         disabled={adding}
-        className="w-full py-1.5 text-[11px] font-semibold bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+        className="w-full py-2.5 md:py-1.5 text-xs md:text-[11px] font-semibold bg-primary/10 text-primary rounded-lg md:rounded hover:bg-primary/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
       >
         {adding ? (
           <Loader2 size={10} className="animate-spin" />
@@ -482,7 +482,7 @@ function QueueItem({
       <button
         onClick={onRunResearch}
         disabled={isResearching}
-        className="shrink-0 px-2.5 py-1.5 text-[11px] font-semibold bg-primary text-white rounded hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-1"
+        className="shrink-0 px-3.5 py-2.5 md:px-2.5 md:py-1.5 text-xs md:text-[11px] font-semibold bg-primary text-white rounded-lg md:rounded hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-1"
       >
         {isResearching ? (
           <>

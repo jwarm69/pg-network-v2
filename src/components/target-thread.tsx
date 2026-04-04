@@ -391,14 +391,16 @@ export function TargetThread({
 
                           {/* Actions */}
                           {!isEditing && (
-                            <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
+                            <div className="flex flex-wrap items-center gap-1 md:gap-1 mt-2 pt-2 border-t border-border">
                               <button
                                 onClick={() =>
                                   handleStartEdit(msg.id, msg.body)
                                 }
-                                className="text-[10px] px-2 py-1 text-muted hover:text-foreground hover:bg-input rounded transition-colors flex items-center gap-1"
+                                className="text-xs md:text-[10px] px-3 py-2 md:px-2 md:py-1 text-muted hover:text-foreground hover:bg-input rounded-lg md:rounded transition-colors flex items-center gap-1.5 md:gap-1 min-h-[36px] md:min-h-0"
                               >
-                                <Edit3 size={10} /> Edit
+                                <Edit3 size={14} className="md:hidden" />
+                                <Edit3 size={10} className="hidden md:block" />
+                                Edit
                               </button>
                               {!msg.sent && (
                                 <>
@@ -406,29 +408,37 @@ export function TargetThread({
                                     onClick={() =>
                                       onUpdateMessage(msg.id, { sent: false })
                                     }
-                                    className="text-[10px] px-2 py-1 text-muted hover:text-success hover:bg-success/10 rounded transition-colors flex items-center gap-1"
+                                    className="text-xs md:text-[10px] px-3 py-2 md:px-2 md:py-1 text-muted hover:text-success hover:bg-success/10 rounded-lg md:rounded transition-colors flex items-center gap-1.5 md:gap-1 min-h-[36px] md:min-h-0"
                                   >
-                                    <Check size={10} /> Approve
+                                    <Check size={14} className="md:hidden" />
+                                    <Check size={10} className="hidden md:block" />
+                                    Approve
                                   </button>
                                   <button
                                     onClick={() => handleMarkSent(msg.id)}
-                                    className="text-[10px] px-2 py-1 text-muted hover:text-info hover:bg-info/10 rounded transition-colors flex items-center gap-1"
+                                    className="text-xs md:text-[10px] px-3 py-2 md:px-2 md:py-1 bg-info/10 text-info hover:bg-info/20 rounded-lg md:rounded transition-colors flex items-center gap-1.5 md:gap-1 min-h-[36px] md:min-h-0 font-semibold md:font-normal"
                                   >
-                                    <Send size={10} /> Mark Sent
+                                    <Send size={14} className="md:hidden" />
+                                    <Send size={10} className="hidden md:block" />
+                                    Mark Sent
                                   </button>
                                 </>
                               )}
                               <button
                                 onClick={() => handleCopy(msg.id, msg.body)}
-                                className="text-[10px] px-2 py-1 text-muted hover:text-foreground hover:bg-input rounded transition-colors flex items-center gap-1"
+                                className="text-xs md:text-[10px] px-3 py-2 md:px-2 md:py-1 text-muted hover:text-foreground hover:bg-input rounded-lg md:rounded transition-colors flex items-center gap-1.5 md:gap-1 min-h-[36px] md:min-h-0"
                               >
                                 {isCopied ? (
                                   <>
-                                    <Check size={10} /> Copied
+                                    <Check size={14} className="md:hidden" />
+                                    <Check size={10} className="hidden md:block" />
+                                    Copied
                                   </>
                                 ) : (
                                   <>
-                                    <Copy size={10} /> Copy
+                                    <Copy size={14} className="md:hidden" />
+                                    <Copy size={10} className="hidden md:block" />
+                                    Copy
                                   </>
                                 )}
                               </button>

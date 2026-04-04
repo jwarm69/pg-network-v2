@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ResearchPanel } from "@/components/panels/research-panel";
 import { OutreachPanel } from "@/components/panels/outreach-panel";
 import { DatabasePanel } from "@/components/panels/database-panel";
@@ -8,19 +8,12 @@ import { CommandBar, type CommandBarHandle } from "@/components/command-bar";
 
 type Panel = "research" | "outreach" | "database";
 
-// ─── Swipe detection thresholds ───
-const SWIPE_MIN_DISTANCE = 50;
-const SWIPE_MAX_VERTICAL = 80;
-
 const PANEL_ORDER: Panel[] = ["research", "outreach", "database"];
 
 export default function Dashboard() {
   const [activePanel, setActivePanel] = useState<Panel>("outreach");
   const [expandedPanel, setExpandedPanel] = useState<Panel | null>(null);
   const commandBarRef = useRef<CommandBarHandle>(null);
-
-  // ─── Swipe gesture state ───
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   function handlePanelClick(panel: Panel) {
     if (expandedPanel === panel) {
@@ -63,33 +56,6 @@ export default function Dashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [expandedPanel]);
 
-  // ─── Swipe gestures for mobile panel switching ───
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-  }, []);
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (!touchStartRef.current) return;
-      const touch = e.changedTouches[0];
-      const dx = touch.clientX - touchStartRef.current.x;
-      const dy = Math.abs(touch.clientY - touchStartRef.current.y);
-      touchStartRef.current = null;
-
-      if (Math.abs(dx) < SWIPE_MIN_DISTANCE || dy > SWIPE_MAX_VERTICAL) return;
-
-      const currentIdx = PANEL_ORDER.indexOf(activePanel);
-      if (dx < 0 && currentIdx < PANEL_ORDER.length - 1) {
-        // Swipe left -> next panel
-        setActivePanel(PANEL_ORDER[currentIdx + 1]);
-      } else if (dx > 0 && currentIdx > 0) {
-        // Swipe right -> prev panel
-        setActivePanel(PANEL_ORDER[currentIdx - 1]);
-      }
-    },
-    [activePanel],
-  );
 
   return (
     <div className="flex flex-col h-screen">
@@ -158,8 +124,6 @@ export default function Dashboard() {
         {/* Mobile: single active panel with swipe */}
         <div
           className="md:hidden flex-1 overflow-y-auto"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
         >
           {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} />}
           {activePanel === "outreach" && <OutreachPanel collapsed={false} onExpand={() => {}} />}
