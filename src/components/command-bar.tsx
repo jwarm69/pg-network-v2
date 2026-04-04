@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
-import { Terminal, Send, Loader2, ChevronUp, ChevronDown, Undo2, Plus } from "lucide-react";
+import { Send, Loader2, Undo2, Plus } from "lucide-react";
 
 interface CommandAction {
   type: string;
@@ -47,7 +47,6 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [lastResponse, setLastResponse] = useState<string | null>(null);
-  const [lastIntent, setLastIntent] = useState<string | null>(null);
   const [commandIndex, setCommandIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -121,6 +120,7 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
 
     if (e.key === "Escape") {
       setMobileExpanded(false);
+      setExpanded(false);
       inputRef.current?.blur();
     }
   }
@@ -132,6 +132,7 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
     setLoading(true);
     setInput("");
     setCommandIndex(-1);
+    setExpanded(true);
 
     try {
       const res = await fetch("/api/command", {
@@ -148,17 +149,15 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
       const entry: HistoryEntry = { input: text, response, intent, confidence, action, timestamp: new Date() };
       setHistory((h) => [...h, entry]);
       setLastResponse(response);
-      setLastIntent(intent);
 
       // If discovery results came back, push them to the Research panel
       if (action?.discoveryResults && onDiscoveryResults) {
         onDiscoveryResults(action.discoveryResults as DiscoveryResult[]);
       }
     } catch {
-      const errorMsg = "Command center offline. Try again later.";
+      const errorMsg = "Offline. Try again.";
       setHistory((h) => [...h, { input: text, response: errorMsg, intent: "ERROR", confidence: 0, timestamp: new Date() }]);
       setLastResponse(errorMsg);
-      setLastIntent("ERROR");
     } finally {
       setLoading(false);
     }
@@ -209,50 +208,35 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
     }
   }, []);
 
-  function intentBadge(intent: string) {
-    const colors: Record<string, string> = {
-      STATUS_QUERY: "text-blue-400",
-      UPDATE_FIELD: "text-amber-400",
-      RESEARCH_CMD: "text-purple-400",
-      MESSAGE_CMD: "text-green-400",
-      DISCOVERY: "text-cyan-400",
-      GENERAL_CHAT: "text-muted",
-      ERROR: "text-red-400",
-    };
-    return (
-      <span className={`text-[9px] font-mono uppercase ${colors[intent] || "text-muted"}`}>
-        {intent.replace("_", " ")}
-      </span>
-    );
-  }
-
   function renderResponse(entry: HistoryEntry, index: number) {
     return (
-      <div className="space-y-1">
-        <div className="flex items-start gap-2 pl-4">
-          <span className="text-xs text-secondary whitespace-pre-wrap flex-1">{entry.response}</span>
-        </div>
-        <div className="flex items-center gap-2 pl-4">
-          {intentBadge(entry.intent)}
-          {entry.action?.type === "UPDATE_FIELD" && !entry.undone && (
-            <button
-              onClick={() => handleUndo(index)}
-              className="inline-flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300 transition-colors"
-            >
-              <Undo2 size={10} />
-              Undo
-            </button>
-          )}
-          {entry.intent === "DISCOVERY" && (
-            <button
-              onClick={() => handleAddToPipeline(entry.action?.query || "Discovery Target")}
-              className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors"
-            >
-              <Plus size={10} />
-              Add to Pipeline
-            </button>
-          )}
-        </div>
+      <div className="space-y-1.5">
+        <p className="text-xs text-secondary whitespace-pre-wrap leading-relaxed pl-5">
+          {entry.response}
+        </p>
+        {/* Only show action buttons when relevant */}
+        {(entry.action?.type === "UPDATE_FIELD" && !entry.undone) || entry.intent === "DISCOVERY" ? (
+          <div className="flex items-center gap-3 pl-5">
+            {entry.action?.type === "UPDATE_FIELD" && !entry.undone && (
+              <button
+                onClick={() => handleUndo(index)}
+                className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                <Undo2 size={11} />
+                Undo
+              </button>
+            )}
+            {entry.intent === "DISCOVERY" && (
+              <button
+                onClick={() => handleAddToPipeline(entry.action?.query || "Discovery Target")}
+                className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors"
+              >
+                <Plus size={11} />
+                Add to Pipeline
+              </button>
+            )}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -260,109 +244,87 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
   // Mobile: tapping the command bar input expands to near-full-screen
   function handleMobileFocus() {
     setMobileExpanded(true);
-    setExpanded(true);
+    if (history.length > 0) {
+      setExpanded(true);
+    }
   }
 
   return (
     <div
       className={`border-t border-border bg-card shrink-0 transition-all duration-200 ${
-        mobileExpanded ? "md:relative fixed inset-x-0 bottom-0 z-50 max-h-[85vh] flex flex-col" : ""
+        mobileExpanded ? "md:relative fixed inset-x-0 bottom-0 z-50 max-h-[80vh] flex flex-col" : ""
       }`}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       {/* Mobile overlay backdrop */}
       {mobileExpanded && (
         <div
-          className="md:hidden fixed inset-0 bg-black/40 -z-10"
-          onClick={() => setMobileExpanded(false)}
+          className="md:hidden fixed inset-0 bg-black/50 -z-10"
+          onClick={() => {
+            setMobileExpanded(false);
+            setExpanded(false);
+            inputRef.current?.blur();
+          }}
         />
       )}
 
-      {/* Expandable history */}
-      {expanded && (
+      {/* History panel — only shows when expanded AND has content */}
+      {expanded && history.length > 0 && (
         <div
           ref={historyRef}
-          className={`overflow-y-auto border-b border-border px-4 py-2 space-y-3 ${
-            mobileExpanded ? "flex-1 max-h-[70vh]" : "max-h-64"
+          className={`overflow-y-auto border-b border-border px-4 py-3 space-y-4 ${
+            mobileExpanded ? "flex-1 max-h-[65vh]" : "max-h-64"
           }`}
         >
-          {history.length === 0 ? (
-            <p className="text-xs text-muted py-4 text-center">
-              Command history will appear here. Try &quot;status&quot;, &quot;research [name]&quot;, or &quot;discover golf podcasts&quot;
-              <br />
-              <span className="text-[10px]">Cmd+K to focus &middot; Up arrow for previous commands</span>
-            </p>
-          ) : (
-            history.map((entry, i) => (
-              <div key={i} className="space-y-1">
-                <div className="flex items-start gap-2">
-                  <span className="text-primary text-xs font-mono mt-0.5">&gt;</span>
-                  <span className="text-xs text-foreground">{entry.input}</span>
-                </div>
-                {renderResponse(entry, i)}
+          {history.map((entry, i) => (
+            <div key={i} className="space-y-1">
+              <div className="flex items-start gap-2">
+                <span className="text-primary text-xs font-mono mt-0.5">&gt;</span>
+                <span className="text-xs text-foreground font-medium">{entry.input}</span>
               </div>
-            ))
-          )}
+              {renderResponse(entry, i)}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Last response preview (when not expanded) */}
-      {!expanded && lastResponse && (
-        <div className="px-4 py-2 md:py-1.5 border-b border-border flex items-center gap-2">
+      {/* Last response preview (collapsed, not on mobile expanded) */}
+      {!expanded && !mobileExpanded && lastResponse && (
+        <button
+          onClick={() => { setExpanded(true); setMobileExpanded(true); }}
+          className="w-full px-4 py-2 border-b border-border flex items-center gap-2 text-left hover:bg-white/5 transition-colors"
+        >
           <p className="text-xs text-secondary truncate flex-1">{lastResponse}</p>
-          {lastIntent && intentBadge(lastIntent)}
-        </div>
+        </button>
       )}
 
       {/* Input bar */}
-      <div className="flex items-center gap-2 md:gap-2 px-4 py-3 md:py-2.5">
-        <button
-          onClick={() => {
-            setExpanded(!expanded);
-            if (mobileExpanded && expanded) setMobileExpanded(false);
-          }}
-          className="text-muted hover:text-secondary transition-colors p-1"
-        >
-          {expanded ? <ChevronDown size={18} className="md:hidden" /> : <ChevronUp size={18} className="md:hidden" />}
-          {expanded ? <ChevronDown size={16} className="hidden md:block" /> : <ChevronUp size={16} className="hidden md:block" />}
-        </button>
-
-        <Terminal size={16} className="text-primary shrink-0 md:hidden" />
-        <Terminal size={14} className="text-primary shrink-0 hidden md:block" />
-
+      <div className="flex items-center gap-3 px-4 py-3.5 md:py-2.5">
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search, command, or ask anything... (\u2318K)"
+          placeholder="Ask anything..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={handleMobileFocus}
           disabled={loading}
-          className="flex-1 bg-transparent text-base md:text-sm outline-none placeholder:text-muted disabled:opacity-50"
+          className="flex-1 bg-transparent text-base md:text-sm outline-none placeholder:text-muted/60 disabled:opacity-50"
         />
 
-        {/* Typing indicator */}
         {loading && (
-          <span className="text-xs md:text-[10px] text-muted animate-pulse mr-1">Thinking...</span>
+          <Loader2 size={20} className="animate-spin text-primary shrink-0" />
         )}
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !input.trim()}
-          className="p-2 md:p-0 rounded-lg md:rounded-none bg-primary/10 md:bg-transparent text-primary hover:text-primary-hover disabled:text-muted transition-colors"
-        >
-          {loading ? (
-            <Loader2 size={20} className="animate-spin md:hidden" />
-          ) : (
-            <Send size={20} className="md:hidden" />
-          )}
-          {loading ? (
-            <Loader2 size={16} className="animate-spin hidden md:block" />
-          ) : (
-            <Send size={16} className="hidden md:block" />
-          )}
-        </button>
+        {!loading && (
+          <button
+            onClick={handleSubmit}
+            disabled={!input.trim()}
+            className="shrink-0 p-2.5 md:p-1.5 rounded-full bg-primary text-white disabled:bg-muted/20 disabled:text-muted transition-colors"
+          >
+            <Send size={16} />
+          </button>
+        )}
       </div>
     </div>
   );
