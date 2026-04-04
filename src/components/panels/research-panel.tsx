@@ -13,6 +13,7 @@ import {
   UserPlus,
   FileSearch,
   X,
+  RefreshCw,
 } from "lucide-react";
 
 interface Props {
@@ -66,6 +67,7 @@ interface ResearchField {
 
 export function ResearchPanel({ collapsed, onExpand }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [lastSearchQuery, setLastSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [discoveryResults, setDiscoveryResults] = useState<DiscoveryResult[]>([]);
   const [discoveryMock, setDiscoveryMock] = useState(false);
@@ -79,6 +81,7 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
   const [expandedDossier, setExpandedDossier] = useState<string | null>(null);
   const [addingTarget, setAddingTarget] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [researchError, setResearchError] = useState<string | null>(null);
 
   const [needResearchCount, setNeedResearchCount] = useState(0);
   const [researchedCount, setResearchedCount] = useState(0);
@@ -92,14 +95,16 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
       const targets: QueueTarget[] = await res.json();
 
       const needsResearch = targets.filter((t) => t.status === "new");
-      const researched = targets.filter((t) => t.status === "researched");
+      const researched = targets.filter((t) =>
+        ["researched", "drafted", "in_contact", "deck_sent", "pending_intro", "meeting_set", "completed"].includes(t.status)
+      );
 
       setQueue(needsResearch);
       setResearchedTargets(researched);
       setNeedResearchCount(needsResearch.length);
       setResearchedCount(researched.length);
     } catch {
-      // silently fail — might not have Supabase configured
+      // DB might not be configured
     } finally {
       setLoadingQueue(false);
     }
@@ -130,6 +135,7 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
     setDiscoveryResults([]);
     setDiscoveryMock(false);
     setSearchError(null);
+    setLastSearchQuery(searchQuery.trim());
 
     try {
       const res = await fetch("/api/research", {
@@ -150,7 +156,13 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
         return;
       }
 
-      setDiscoveryResults(data.results || []);
+      const results = data.results || [];
+      if (results.length === 0) {
+        setSearchError("No results found. Try a different query.");
+        return;
+      }
+
+      setDiscoveryResults(results);
       setDiscoveryMock(!!data.mock);
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : "Search failed — check network");
@@ -162,6 +174,14 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
   // ── Run research on a target ──
   async function runResearch(targetId: string) {
     setResearchingId(targetId);
+    setResearchError(null);
+    // Clear cached dossier so fresh data loads
+    setDossiers((prev) => {
+      const next = { ...prev };
+      delete next[targetId];
+      return next;
+    });
+
     try {
       const res = await fetch("/api/research", {
         method: "POST",
@@ -169,18 +189,27 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
         body: JSON.stringify({ targetId }),
       });
 
-      if (!res.ok) throw new Error("Research failed");
-
       const data = await res.json();
+
+      if (!res.ok) {
+        setResearchError(data.error || `Research failed (${res.status})`);
+        return;
+      }
+
       if (data.dossier) {
-        setDossiers((prev) => ({ ...prev, [targetId]: data.dossier }));
+        // Include contact paths from the response
+        const dossier = {
+          ...data.dossier,
+          contactPaths: data.contactPaths || data.dossier.contactPaths || [],
+        };
+        setDossiers((prev) => ({ ...prev, [targetId]: dossier }));
         setExpandedDossier(targetId);
       }
 
       // Refresh queue
       await fetchTargets();
-    } catch {
-      // error handled silently
+    } catch (err) {
+      setResearchError(err instanceof Error ? err.message : "Research failed");
     } finally {
       setResearchingId(null);
     }
@@ -229,12 +258,12 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
       </div>
 
       {/* Discovery search */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-3">
         <div className="flex-1 relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <input
             type="text"
-            placeholder="Find targets..."
+            placeholder="Search for targets... (e.g. 'golf podcasts', 'PGA players from Florida')"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -244,11 +273,19 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
         <button
           onClick={handleSearch}
           disabled={searching}
-          className="px-5 md:px-3 py-3 md:py-2 text-sm md:text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
+          className="px-5 md:px-3 py-3 md:py-2 text-sm md:text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 min-w-[60px] flex items-center justify-center"
         >
           {searching ? <Loader2 size={14} className="animate-spin" /> : "Go"}
         </button>
       </div>
+
+      {/* Searching indicator */}
+      {searching && (
+        <div className="flex items-center gap-2 text-xs text-primary bg-primary/5 rounded-lg px-3 py-2 mb-3 animate-pulse">
+          <Loader2 size={12} className="animate-spin" />
+          <span>Searching for &ldquo;{lastSearchQuery}&rdquo;...</span>
+        </div>
+      )}
 
       {/* Error display */}
       {searchError && (
@@ -261,15 +298,27 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
         </div>
       )}
 
+      {/* Research error */}
+      {researchError && (
+        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2 mb-3">
+          <AlertTriangle size={12} className="shrink-0" />
+          <span className="break-all">{researchError}</span>
+          <button onClick={() => setResearchError(null)} className="ml-auto shrink-0">
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* Discovery results */}
       {discoveryResults.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-              Discovery Results
+              Results for &ldquo;{lastSearchQuery}&rdquo;
+              <span className="ml-1 text-secondary font-normal">({discoveryResults.length})</span>
             </h3>
             <button
-              onClick={() => setDiscoveryResults([])}
+              onClick={() => { setDiscoveryResults([]); setLastSearchQuery(""); }}
               className="text-muted hover:text-secondary"
             >
               <X size={12} />
@@ -281,10 +330,10 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
               <span>Mock data — configure API keys for real results</span>
             </div>
           )}
-          <div className="space-y-2 max-h-60 overflow-y-auto">
+          <div className="space-y-2 max-h-72 overflow-y-auto">
             {discoveryResults.map((result, i) => (
               <DiscoveryCard
-                key={i}
+                key={`${lastSearchQuery}-${i}`}
                 result={result}
                 onAdd={() => addToPipeline(result)}
                 adding={addingTarget === result.name}
@@ -323,7 +372,7 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
           <div className="text-center py-6 text-muted text-sm">
             <FlaskConical size={24} className="mx-auto mb-2 opacity-50" />
             <p>No targets in queue</p>
-            <p className="text-xs mt-1">Search above or add from the Leads panel</p>
+            <p className="text-xs mt-1">Search above to discover and add targets</p>
           </div>
         ) : (
           <div className="space-y-1 mb-4">
@@ -342,32 +391,46 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
         {researchedTargets.length > 0 && (
           <>
             <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 mt-4">
-              Researched
+              Researched ({researchedTargets.length})
             </h3>
             <div className="space-y-1">
               {researchedTargets.map((target) => (
                 <div key={target.id}>
-                  <button
-                    onClick={() =>
-                      setExpandedDossier(
-                        expandedDossier === target.id ? null : target.id
-                      )
-                    }
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-card hover:bg-card-hover transition-colors text-left"
-                  >
-                    {expandedDossier === target.id ? (
-                      <ChevronDown size={12} className="text-muted shrink-0" />
-                    ) : (
-                      <ChevronRight size={12} className="text-muted shrink-0" />
-                    )}
-                    <FileSearch size={12} className="text-success shrink-0" />
-                    <span className="font-medium truncate flex-1">
-                      {target.name}
-                    </span>
-                    <span className="text-[10px] text-success uppercase font-semibold">
-                      Done
-                    </span>
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() =>
+                        setExpandedDossier(
+                          expandedDossier === target.id ? null : target.id
+                        )
+                      }
+                      className="flex-1 flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-card hover:bg-card-hover transition-colors text-left"
+                    >
+                      {expandedDossier === target.id ? (
+                        <ChevronDown size={12} className="text-muted shrink-0" />
+                      ) : (
+                        <ChevronRight size={12} className="text-muted shrink-0" />
+                      )}
+                      <FileSearch size={12} className="text-success shrink-0" />
+                      <span className="font-medium truncate flex-1">
+                        {target.name}
+                      </span>
+                      <span className="text-[10px] text-success uppercase font-semibold">
+                        {target.status === "researched" ? "Done" : target.status.replace("_", " ")}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => runResearch(target.id)}
+                      disabled={researchingId === target.id}
+                      className="shrink-0 p-1.5 text-muted hover:text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
+                      title="Re-research"
+                    >
+                      {researchingId === target.id ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <RefreshCw size={12} />
+                      )}
+                    </button>
+                  </div>
 
                   {expandedDossier === target.id && (
                     <DossierView
@@ -499,7 +562,7 @@ function QueueItem({
         {isResearching ? (
           <>
             <Loader2 size={10} className="animate-spin" />
-            Running...
+            Researching...
           </>
         ) : (
           <>
@@ -522,18 +585,22 @@ function DossierView({
   onLoadDossier: (d: Dossier) => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (dossier || loading) return;
 
-    // Fetch research data for this target from the research fields
     async function loadResearch() {
       setLoading(true);
+      setLoadError(null);
       try {
         const res = await fetch(`/api/research?targetId=${targetId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          setLoadError("Failed to load research data");
+          return;
+        }
         const data = await res.json();
-        if (data.fields && Array.isArray(data.fields)) {
+        if (data.fields && Array.isArray(data.fields) && data.fields.length > 0) {
           const fieldMap: Record<string, string> = {};
           data.fields.forEach((f: ResearchField) => {
             fieldMap[f.field] = f.value;
@@ -551,9 +618,11 @@ function DossierView({
               : [],
             contactPaths: data.contactPaths || [],
           });
+        } else {
+          setLoadError("No research data yet. Click the refresh button to research this target.");
         }
       } catch {
-        // silently fail
+        setLoadError("Failed to load research data");
       } finally {
         setLoading(false);
       }
@@ -571,10 +640,19 @@ function DossierView({
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="px-3 py-3 text-xs text-muted flex items-center gap-2">
+        <AlertTriangle size={12} className="text-warning shrink-0" />
+        {loadError}
+      </div>
+    );
+  }
+
   if (!dossier) {
     return (
       <div className="px-3 py-2 text-xs text-muted">
-        No research data found. Click &quot;Research&quot; to generate a dossier.
+        No research data found. Click the refresh button to generate a dossier.
       </div>
     );
   }
@@ -584,7 +662,6 @@ function DossierView({
       <DossierSection label="Bio" value={dossier.bio} />
       <DossierSection label="Golf Connection" value={dossier.golfConnection} />
       <DossierSection label="Reach" value={dossier.reach} />
-      <DossierSection label="Contact Intel" value={dossier.contactIntel} />
       <DossierSection label="Recent Activity" value={dossier.recentActivity} />
       {dossier.partnershipAngle && (
         <DossierSection label="Partnership Angle" value={dossier.partnershipAngle} />
@@ -592,14 +669,14 @@ function DossierView({
       {dossier.contactPaths && dossier.contactPaths.length > 0 && (
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-2">
-            Contact Routes
+            Contact Routes ({dossier.contactPaths.length})
           </p>
           <div className="space-y-2">
             {dossier.contactPaths.map((cp, i) => (
               <div key={i} className="bg-surface rounded-lg px-3 py-2 border border-border">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider">
-                    {cp.type === "direct" ? "Direct" : cp.type === "agent" ? "Agent/Rep" : "Wildcard"}
+                    {cp.type === "direct" ? "Direct" : cp.type === "agent" ? "Agent / Rep" : "Wildcard"}
                   </span>
                   <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                     cp.confidence === "high" ? "bg-success/20 text-success" :
@@ -642,6 +719,9 @@ function DossierView({
             ))}
           </div>
         </div>
+      )}
+      {(!dossier.contactPaths || dossier.contactPaths.length === 0) && dossier.contactIntel && (
+        <DossierSection label="Contact Intel" value={dossier.contactIntel} />
       )}
       {dossier.riskFlags && dossier.riskFlags.length > 0 && (
         <div>
