@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { isDbConfigured, getMessageById } from "@/lib/db";
 import { getAdapter } from "@/lib/send-adapter";
 
 export const dynamic = "force-dynamic";
 
-// \u2500\u2500\u2500 GET: adapter status \u2500\u2500\u2500
+// ─── GET: adapter status ───
 
 export async function GET() {
   const adapter = getAdapter();
@@ -14,7 +14,7 @@ export async function GET() {
   });
 }
 
-// \u2500\u2500\u2500 POST: create_draft | sync_inbox \u2500\u2500\u2500
+// ─── POST: create_draft | sync_inbox ───
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   );
 }
 
-// \u2500\u2500\u2500 Handlers \u2500\u2500\u2500
+// ─── Handlers ───
 
 async function handleCreateDraft(body: Record<string, unknown>) {
   const messageId = body.messageId as string | undefined;
@@ -48,20 +48,16 @@ async function handleCreateDraft(body: Record<string, unknown>) {
     return NextResponse.json({ error: "messageId is required" }, { status: 400 });
   }
 
-  if (!isSupabaseConfigured()) {
+  if (!isDbConfigured()) {
     return NextResponse.json(
-      { error: "Supabase not configured" },
+      { error: "Database not configured" },
       { status: 503 }
     );
   }
 
-  const { data: message, error: fetchError } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("id", messageId)
-    .single();
+  const message = await getMessageById(messageId);
 
-  if (fetchError || !message) {
+  if (!message) {
     return NextResponse.json(
       { error: "Message not found" },
       { status: 404 }

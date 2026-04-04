@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import {
+  isDbConfigured,
+  getTarget,
+  updateTarget,
+  getResearch,
+  deleteResearch,
+  insertResearchRows,
+} from "@/lib/db";
 import { searchPerplexity, isPerplexityConfigured } from "@/lib/perplexity";
 import { askClaude } from "@/lib/claude";
 
@@ -15,21 +22,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "targetId is required" }, { status: 400 });
   }
 
-  if (!isSupabaseConfigured()) {
+  if (!isDbConfigured()) {
     return NextResponse.json({ fields: [] });
   }
 
-  const { data, error } = await supabase
-    .from("research")
-    .select("*")
-    .eq("target_id", targetId)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const data = await getResearch(targetId);
+    return NextResponse.json({ fields: data });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json({ fields: data || [] });
 }
 
 // ─── Discovery mode mock data ───
@@ -186,21 +189,14 @@ Return ONLY valid JSON array, no other text.`;
 // ─── Target research: build a dossier ───
 
 async function handleTargetResearch(targetId: string) {
-  // Fetch target from Supabase
   let targetName = "Unknown Target";
   let targetType = "celebrity";
 
-  if (isSupabaseConfigured()) {
-    const { data: target, error } = await supabase
-      .from("targets")
-      .select("*")
-      .eq("id", targetId)
-      .single();
-
-    if (error || !target) {
+  if (isDbConfigured()) {
+    const target = await getTarget(targetId);
+    if (!target) {
       return NextResponse.json({ error: "Target not found" }, { status: 404 });
     }
-
     targetName = target.name;
     targetType = target.type;
   }
@@ -208,13 +204,9 @@ async function handleTargetResearch(targetId: string) {
   if (!isPerplexityConfigured()) {
     const mock = mockResearchDossier(targetName);
 
-    // Still save mock research to Supabase if configured
-    if (isSupabaseConfigured()) {
+    if (isDbConfigured()) {
       await saveResearchRows(targetId, mock.researchFields);
-      await supabase
-        .from("targets")
-        .update({ status: "researched", updated_at: new Date().toISOString() })
-        .eq("id", targetId);
+      await updateTarget(targetId, { status: "researched" } as Partial<import("@/lib/db").Target>);
     }
 
     return NextResponse.json(mock);
@@ -296,7 +288,7 @@ Return ONLY valid JSON, no other text.`;
     };
   }
 
-  // Save research rows to Supabase
+  // Save research rows
   const researchFields = [
     { field: "bio", value: dossier.bio || "" },
     { field: "golf_connection", value: dossier.golfConnection || "" },
@@ -312,13 +304,9 @@ Return ONLY valid JSON, no other text.`;
     },
   ];
 
-  if (isSupabaseConfigured()) {
+  if (isDbConfigured()) {
     await saveResearchRows(targetId, researchFields);
-    // Update target status to researched
-    await supabase
-      .from("targets")
-      .update({ status: "researched", updated_at: new Date().toISOString() })
-      .eq("id", targetId);
+    await updateTarget(targetId, { status: "researched" } as Partial<import("@/lib/db").Target>);
   }
 
   return NextResponse.json({
@@ -329,25 +317,16 @@ Return ONLY valid JSON, no other text.`;
   });
 }
 
-// ─── Save research rows to Supabase ───
+// ─── Save research rows ───
 
 async function saveResearchRows(
   targetId: string,
   fields: { field: string; value: string }[]
 ) {
-  const rows = fields.map((f) => ({
-    target_id: targetId,
-    field: f.field,
-    value: f.value,
-    verified: false,
-  }));
-
-  // Delete old research for this target first
-  await supabase.from("research").delete().eq("target_id", targetId);
-
-  // Insert new rows
-  const { error } = await supabase.from("research").insert(rows);
-  if (error) {
-    console.error("Failed to save research:", error.message);
+  try {
+    await deleteResearch(targetId);
+    await insertResearchRows(targetId, fields);
+  } catch (err) {
+    console.error("Failed to save research:", err);
   }
 }

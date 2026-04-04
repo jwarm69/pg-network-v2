@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { isDbConfigured, logActivity } from "./db";
 
 export interface InboxMessage {
   from: string;
@@ -27,8 +27,9 @@ export class NoopAdapter implements SendAdapter {
   readonly name = "noop";
 
   async createDraft(to: string, subject: string, body: string): Promise<DraftResult> {
-    if (isSupabaseConfigured()) {
-      await supabase.from("activity_log").insert({
+    if (isDbConfigured()) {
+      await logActivity({
+        target_id: null,
         action: "draft_created",
         details: JSON.stringify({ to, subject, bodyLength: body.length }),
       });
@@ -45,11 +46,11 @@ export class PlaywrightAdapter implements SendAdapter {
   readonly name = "playwright";
 
   async createDraft(_to: string, _subject: string, _body: string): Promise<DraftResult> {
-    throw new Error("Not implemented \u2014 connect Playwright or Claude Connectors");
+    throw new Error("Not implemented — connect Playwright or Claude Connectors");
   }
 
   async syncInbox(_query: string): Promise<InboxResult> {
-    throw new Error("Not implemented \u2014 connect Playwright or Claude Connectors");
+    throw new Error("Not implemented — connect Playwright or Claude Connectors");
   }
 }
 

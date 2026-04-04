@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { validateMessage, type Violation } from "@/lib/validate";
-import type { Message } from "@/lib/supabase";
+import type { Message } from "@/lib/db";
 
 // ─── Props ───
 

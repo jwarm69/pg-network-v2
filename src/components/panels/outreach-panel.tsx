@@ -17,7 +17,7 @@ import type {
   OutreachThread,
   Message,
   Target,
-} from "@/lib/supabase";
+} from "@/lib/db";
 
 interface Props {
   collapsed: boolean;

@@ -19,7 +19,7 @@ import type {
   TargetType,
   TargetStatus,
   Priority,
-} from "@/lib/supabase";
+} from "@/lib/db";
 
 interface Props {
   collapsed: boolean;

@@ -1,29 +1,33 @@
 import { NextResponse } from "next/server";
-import { supabase, isSupabaseConfigured, type Target } from "@/lib/supabase";
+import {
+  isDbConfigured,
+  getTargets,
+  createTarget,
+  updateTarget,
+  deleteTarget,
+  type Target,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (!isSupabaseConfigured()) {
+  if (!isDbConfigured()) {
     return NextResponse.json([]);
   }
 
-  const { data, error } = await supabase
-    .from("targets")
-    .select("*")
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const data = await getTargets();
+    return NextResponse.json(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json(data || []);
 }
 
 export async function POST(request: Request) {
   const body = await request.json();
 
-  const target: Partial<Target> = {
+  const target: Omit<Target, "id" | "created_at" | "updated_at"> = {
     name: body.name,
     type: body.type || "celebrity",
     status: body.status || "new",
@@ -33,17 +37,13 @@ export async function POST(request: Request) {
     notes: body.notes || "",
   };
 
-  const { data, error } = await supabase
-    .from("targets")
-    .insert(target)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const data = await createTarget(target);
+    return NextResponse.json(data, { status: 201 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json(data, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
@@ -54,18 +54,13 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Target ID required" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("targets")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const data = await updateTarget(id, updates);
+    return NextResponse.json(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }
 
 export async function DELETE(request: Request) {
@@ -75,14 +70,11 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Target ID required" }, { status: 400 });
   }
 
-  const { error } = await supabase
-    .from("targets")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    await deleteTarget(id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true });
 }

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { classifyIntent, askClaude } from "@/lib/claude";
 import {
-  supabase,
-  isSupabaseConfigured,
+  isDbConfigured,
   getTargets,
   updateTarget,
+  saveCommandEntry,
   type Target,
-} from "@/lib/supabase";
+} from "@/lib/db";
 import { searchPerplexity } from "@/lib/perplexity";
 
 // ─── Rate limiter (1 req/sec) ───
@@ -167,21 +167,6 @@ async function buildStatusSummary(): Promise<string> {
   return lines.join("\n");
 }
 
-// ─── Save command to history ───
-
-async function saveCommandHistory(input: string, response: string, intent: string) {
-  if (!isSupabaseConfigured()) return;
-  try {
-    await supabase.from("command_history").insert({
-      input,
-      response,
-      intent,
-    });
-  } catch {
-    // Non-critical, don't throw
-  }
-}
-
 // ─── Main handler ───
 
 export async function POST(request: Request) {
@@ -207,9 +192,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No input provided" }, { status: 400 });
   }
 
-  if (!isSupabaseConfigured()) {
+  if (!isDbConfigured()) {
     return NextResponse.json({
-      response: "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment variables to enable full Command Center functionality.",
+      response: "Database is not configured. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in your environment variables to enable full Command Center functionality.",
       intent: "ERROR",
       confidence: 1.0,
     });
@@ -337,7 +322,7 @@ Keep responses concise and actionable. Use plain text, not markdown.`;
   }
 
   // Save to command history (fire and forget)
-  saveCommandHistory(input, response, intent);
+  saveCommandEntry(input, response, intent).catch(() => {});
 
   return NextResponse.json({
     response,

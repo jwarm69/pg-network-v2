@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import {
-  supabase,
-  isSupabaseConfigured,
+  isDbConfigured,
   getTarget,
   getResearch,
+  createThread,
+  insertMessages,
+  updateTarget,
+  logActivity,
+  getAllThreadsWithTargets,
+  updateMessage,
+  updateThread,
   type Lane,
   type OutreachThread,
   type Message,
-} from "@/lib/supabase";
+} from "@/lib/db";
 import { askClaude } from "@/lib/claude";
 import { validateMessage, type ValidationResult } from "@/lib/validate";
 import {
@@ -232,8 +238,8 @@ export async function POST(request: Request) {
     // Check if Claude API is available
     const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
 
-    // If Supabase isn't configured, return example data
-    if (!isSupabaseConfigured()) {
+    // If DB isn't configured, return example data
+    if (!isDbConfigured()) {
       const example = buildExampleResponse("Example Target");
       return NextResponse.json(example);
     }
@@ -317,56 +323,38 @@ export async function POST(request: Request) {
       });
     }
 
-    // Save to Supabase
+    // Save to database
     const savedThreads: Array<OutreachThread & { messages: Message[] }> = [];
 
     for (const lane of generatedLanes) {
-      // Create thread
-      const { data: thread, error: threadError } = await supabase
-        .from("outreach_threads")
-        .insert({
+      try {
+        const thread = await createThread({
           target_id: targetId,
           lane: lane.lane,
           channel: lane.channel,
-          status: "draft" as const,
-        })
-        .select()
-        .single();
+          status: "draft",
+        });
 
-      if (threadError) {
-        console.error("Error creating thread:", threadError);
-        continue;
+        const messagesToInsert = lane.messages.map((msg) => ({
+          thread_id: thread.id,
+          sequence: msg.sequence,
+          subject: msg.subject,
+          body: msg.body,
+          sent: false,
+        }));
+
+        const messages = await insertMessages(messagesToInsert);
+        savedThreads.push({ ...thread, messages });
+      } catch (err) {
+        console.error("Error creating thread:", err);
       }
-
-      // Create messages
-      const messagesToInsert = lane.messages.map((msg) => ({
-        thread_id: thread.id,
-        sequence: msg.sequence,
-        subject: msg.subject,
-        body: msg.body,
-        sent: false,
-      }));
-
-      const { data: messages, error: msgError } = await supabase
-        .from("messages")
-        .insert(messagesToInsert)
-        .select();
-
-      if (msgError) {
-        console.error("Error creating messages:", msgError);
-      }
-
-      savedThreads.push({ ...thread, messages: messages || [] });
     }
 
     // Update target status
-    await supabase
-      .from("targets")
-      .update({ status: "drafted", updated_at: new Date().toISOString() })
-      .eq("id", targetId);
+    await updateTarget(targetId, { status: "drafted" } as Partial<import("@/lib/db").Target>);
 
     // Log activity
-    await supabase.from("activity_log").insert({
+    await logActivity({
       target_id: targetId,
       action: "outreach_generated",
       details: `Generated 3-lane outreach for ${target.name} using "${selectedAngle}" angle`,
@@ -388,33 +376,12 @@ export async function POST(request: Request) {
 
 // GET: fetch all outreach threads with their target info
 export async function GET() {
-  if (!isSupabaseConfigured()) {
+  if (!isDbConfigured()) {
     return NextResponse.json([]);
   }
 
   try {
-    const { data: threads, error } = await supabase
-      .from("outreach_threads")
-      .select("*, targets(id, name, type, status, priority, score)")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // For each thread, fetch messages
-    const threadsWithMessages = await Promise.all(
-      (threads || []).map(async (thread: OutreachThread & { targets: unknown }) => {
-        const { data: messages } = await supabase
-          .from("messages")
-          .select("*")
-          .eq("thread_id", thread.id)
-          .order("sequence", { ascending: true });
-
-        return { ...thread, messages: messages || [] };
-      })
-    );
-
+    const threadsWithMessages = await getAllThreadsWithTargets();
     return NextResponse.json(threadsWithMessages);
   } catch (err) {
     console.error("Error fetching outreach threads:", err);
@@ -432,30 +399,12 @@ export async function PATCH(request: Request) {
     const { messageId, threadId, ...updates } = body;
 
     if (messageId) {
-      const { data, error } = await supabase
-        .from("messages")
-        .update(updates)
-        .eq("id", messageId)
-        .select()
-        .single();
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+      const data = await updateMessage(messageId, updates);
       return NextResponse.json(data);
     }
 
     if (threadId) {
-      const { data, error } = await supabase
-        .from("outreach_threads")
-        .update(updates)
-        .eq("id", threadId)
-        .select()
-        .single();
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+      const data = await updateThread(threadId, updates);
       return NextResponse.json(data);
     }
 

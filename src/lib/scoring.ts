@@ -1,5 +1,5 @@
 import { SCORING } from "./brand-dna";
-import type { TargetType } from "./supabase";
+import type { TargetType } from "./db";
 
 export type ScoreDimension = (typeof SCORING.dimensions)[number];
 

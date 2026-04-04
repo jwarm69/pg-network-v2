@@ -12,7 +12,7 @@ import {
   Clock,
   X,
 } from "lucide-react";
-import type { Lane, Message, OutreachThread, ActivityEntry } from "@/lib/supabase";
+import type { Lane, Message, OutreachThread, ActivityEntry } from "@/lib/db";
 
 // ─── Types ───
 
