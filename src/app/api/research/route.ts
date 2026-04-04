@@ -136,20 +136,12 @@ async function handleDiscovery(query: string) {
     return NextResponse.json(mockDiscoveryResults(query));
   }
 
-  const searchPrompt = `Find potential brand partnership targets for Performance Golf (a $120M+ AI-powered golf improvement company). Query: "${query}".
-
-For each result provide:
-- Name
-- Brief description (1-2 sentences)
-- Golf connection or relevance to golf
-- Estimated social reach / audience size
-- Relevance level (high, medium, or low) for a golf brand partnership
-
-Return 3-5 results. Focus on people, podcasts, or brands that would be good partnership targets.`;
+  // Keep query short for Tavily (400 char limit). Context goes to Claude later.
+  const searchQuery = `${query} golf partnership brand`.slice(0, 390);
 
   let rawResult: string;
   try {
-    rawResult = await searchPerplexity(searchPrompt);
+    rawResult = await searchPerplexity(searchQuery);
   } catch (err) {
     console.error("Search API error:", err);
     return NextResponse.json(
@@ -238,23 +230,24 @@ async function handleTargetResearch(targetId: string) {
     return NextResponse.json(mock);
   }
 
-  // Run multiple Perplexity searches in parallel
+  // Run multiple searches in parallel (keep queries under 400 chars for Tavily)
+  const name = targetName.slice(0, 80);
   const [bioResult, golfResult, contactResult, activityResult, reachResult] =
     await Promise.all([
       searchPerplexity(
-        `Who is ${targetName}? Brief bio, career highlights, and current projects.`
+        `${name} bio career highlights current projects`
       ),
       searchPerplexity(
-        `What is ${targetName}'s connection to golf? Do they play golf, have golf partnerships, or appear at golf events?`
+        `${name} golf connection partnerships golf events`
       ),
       searchPerplexity(
-        `Who is ${targetName}'s agent, manager, or management company? How to contact ${targetName} for brand partnerships?`
+        `${name} agent manager management contact brand partnerships`
       ),
       searchPerplexity(
-        `What has ${targetName} been doing recently? Latest news, social media posts, appearances, projects in 2025-2026.`
+        `${name} recent news social media appearances 2025 2026`
       ),
       searchPerplexity(
-        `What is ${targetName}'s social media following? Instagram, Twitter/X, YouTube, TikTok follower counts.`
+        `${name} social media following Instagram Twitter YouTube TikTok`
       ),
     ]);
 
