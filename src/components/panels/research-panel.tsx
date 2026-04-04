@@ -66,6 +66,7 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
   const [dossiers, setDossiers] = useState<Record<string, Dossier>>({});
   const [expandedDossier, setExpandedDossier] = useState<string | null>(null);
   const [addingTarget, setAddingTarget] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const [needResearchCount, setNeedResearchCount] = useState(0);
   const [researchedCount, setResearchedCount] = useState(0);
@@ -116,6 +117,7 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
     setSearching(true);
     setDiscoveryResults([]);
     setDiscoveryMock(false);
+    setSearchError(null);
 
     try {
       const res = await fetch("/api/research", {
@@ -124,13 +126,22 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
         body: JSON.stringify({ query: searchQuery }),
       });
 
-      if (!res.ok) throw new Error("Search failed");
-
       const data = await res.json();
+
+      if (!res.ok) {
+        setSearchError(data.error || `Search failed (${res.status})`);
+        return;
+      }
+
+      if (data.error) {
+        setSearchError(data.error);
+        return;
+      }
+
       setDiscoveryResults(data.results || []);
       setDiscoveryMock(!!data.mock);
-    } catch {
-      setDiscoveryResults([]);
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : "Search failed — check network");
     } finally {
       setSearching(false);
     }
@@ -226,6 +237,17 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
           {searching ? <Loader2 size={14} className="animate-spin" /> : "Go"}
         </button>
       </div>
+
+      {/* Error display */}
+      {searchError && (
+        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2 mb-3">
+          <AlertTriangle size={12} className="shrink-0" />
+          <span className="break-all">{searchError}</span>
+          <button onClick={() => setSearchError(null)} className="ml-auto shrink-0">
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Discovery results */}
       {discoveryResults.length > 0 && (

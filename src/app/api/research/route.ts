@@ -147,32 +147,58 @@ For each result provide:
 
 Return 3-5 results. Focus on people, podcasts, or brands that would be good partnership targets.`;
 
-  const rawResult = await searchPerplexity(searchPrompt);
-
-  // Use Claude to structure the raw Perplexity results
-  let results;
+  let rawResult: string;
   try {
-    const structurePrompt = `Parse the following search results into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
+    rawResult = await searchPerplexity(searchPrompt);
+  } catch (err) {
+    console.error("Search API error:", err);
+    return NextResponse.json(
+      { error: `Search failed: ${err instanceof Error ? err.message : "Unknown error"}` },
+      { status: 502 }
+    );
+  }
+
+  if (!rawResult || rawResult.trim().length === 0) {
+    return NextResponse.json(
+      { error: "Search returned empty results. Try a different query." },
+      { status: 502 }
+    );
+  }
+
+  // Use Claude to structure the raw search results
+  let results;
+  const hasClaudeKey = !!process.env.ANTHROPIC_API_KEY;
+
+  if (hasClaudeKey) {
+    try {
+      const structurePrompt = `Parse the following search results into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
 
 Search results:
 ${rawResult}
 
 Return ONLY valid JSON array, no other text.`;
 
-    const structured = await askClaude(structurePrompt, {
-      system: "You are a JSON parser. Return only valid JSON arrays.",
-      maxTokens: 1024,
-      temperature: 0,
-    });
+      const structured = await askClaude(structurePrompt, {
+        system: "You are a JSON parser. Return only valid JSON arrays.",
+        maxTokens: 1024,
+        temperature: 0,
+      });
 
-    results = JSON.parse(structured);
-  } catch {
-    // If parsing fails, return raw result
+      results = JSON.parse(structured);
+    } catch (err) {
+      console.error("Claude parse error:", err);
+      // Fall through to raw result fallback
+      results = null;
+    }
+  }
+
+  if (!results) {
+    // Fallback: return raw search as a single result
     results = [
       {
         name: "Search Results",
         description: rawResult.slice(0, 500),
-        relevance: "medium",
+        relevance: "medium" as const,
         golfConnection: "See description",
         estimatedReach: "Unknown",
       },
