@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ResearchPanel } from "@/components/panels/research-panel";
 import { OutreachPanel } from "@/components/panels/outreach-panel";
 import { DatabasePanel } from "@/components/panels/database-panel";
 import { CommandBar, type CommandBarHandle } from "@/components/command-bar";
+import type { DiscoveryResult } from "@/components/panels/research-panel";
 
 type Panel = "research" | "outreach" | "database";
 
@@ -13,7 +14,13 @@ const PANEL_ORDER: Panel[] = ["research", "outreach", "database"];
 export default function Dashboard() {
   const [activePanel, setActivePanel] = useState<Panel>("outreach");
   const [expandedPanel, setExpandedPanel] = useState<Panel | null>(null);
+  const [injectedResults, setInjectedResults] = useState<DiscoveryResult[] | null>(null);
   const commandBarRef = useRef<CommandBarHandle>(null);
+
+  const handleDiscoveryResults = useCallback((results: DiscoveryResult[]) => {
+    setInjectedResults(results);
+    setActivePanel("research");
+  }, []);
 
   function handlePanelClick(panel: Panel) {
     if (expandedPanel === panel) {
@@ -89,6 +96,8 @@ export default function Dashboard() {
             <ResearchPanel
               collapsed={expandedPanel !== null && expandedPanel !== "research"}
               onExpand={() => handlePanelClick("research")}
+              injectedResults={injectedResults}
+              onClearInjected={() => setInjectedResults(null)}
             />
           </div>
           <div
@@ -125,14 +134,14 @@ export default function Dashboard() {
         <div
           className="md:hidden flex-1 overflow-y-auto"
         >
-          {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} />}
+          {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} injectedResults={injectedResults} onClearInjected={() => setInjectedResults(null)} />}
           {activePanel === "outreach" && <OutreachPanel collapsed={false} onExpand={() => {}} />}
           {activePanel === "database" && <DatabasePanel collapsed={false} onExpand={() => {}} />}
         </div>
       </main>
 
       {/* Command Bar -- always visible */}
-      <CommandBar ref={commandBarRef} />
+      <CommandBar ref={commandBarRef} onDiscoveryResults={handleDiscoveryResults} />
     </div>
   );
 }

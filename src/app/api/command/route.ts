@@ -261,9 +261,66 @@ export async function POST(request: Request) {
       }
 
       case "RESEARCH_CMD": {
-        const name = entities.name || entities.target || input.replace(/^research\s+/i, "").trim();
-        response = `Research queued for "${name}". The system will gather background information, social profiles, and golf connections.`;
-        action = { type: "RESEARCH_CMD", target: name };
+        const name = entities.name || entities.target || input.replace(/^(research|look up|look into|find info|dig into)\s+/i, "").trim();
+
+        // Actually trigger discovery search
+        const researchQuery = `${name} golf partnership brand`;
+        let discoveryResults = null;
+
+        try {
+          const { searchPerplexity: search, isPerplexityConfigured } = await import("@/lib/perplexity");
+          if (isPerplexityConfigured()) {
+            const rawResult = await search(researchQuery.slice(0, 390));
+            if (rawResult && rawResult.trim().length > 0) {
+              // Try to structure with Claude
+              const hasKey = !!process.env.ANTHROPIC_API_KEY;
+              if (hasKey) {
+                try {
+                  const structurePrompt = `Parse the following search results about "${name}" into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
+
+Search results:
+${rawResult}
+
+Return ONLY valid JSON array, no other text.`;
+                  const structured = await askClaude(structurePrompt, {
+                    system: "You are a JSON parser. Return only valid JSON arrays.",
+                    maxTokens: 1024,
+                    temperature: 0,
+                  });
+                  discoveryResults = JSON.parse(structured);
+                } catch {
+                  discoveryResults = null;
+                }
+              }
+
+              if (!discoveryResults) {
+                discoveryResults = [{
+                  name: "Search Results",
+                  description: rawResult.slice(0, 500),
+                  relevance: "medium" as const,
+                  golfConnection: "See description",
+                  estimatedReach: "Unknown",
+                }];
+              }
+            }
+          }
+        } catch {
+          // Fall through to text-only response
+        }
+
+        if (discoveryResults && discoveryResults.length > 0) {
+          const resultsSummary = discoveryResults
+            .slice(0, 5)
+            .map((r: { name: string; description: string; relevance: string }, i: number) =>
+              `${i + 1}. ${r.name} (${r.relevance}) — ${r.description.slice(0, 100)}`
+            )
+            .join("\n");
+          response = `Found ${discoveryResults.length} result(s) for "${name}":\n\n${resultsSummary}\n\nResults have been loaded into the Research Hub. Switch to the Research tab to add targets to your pipeline.`;
+          action = { type: "RESEARCH_CMD", target: name, discoveryResults };
+        } else {
+          response = `Searched for "${name}" but no structured results found. Try searching directly in the Research Hub search bar.`;
+          action = { type: "RESEARCH_CMD", target: name };
+        }
         break;
       }
 
@@ -286,6 +343,63 @@ export async function POST(request: Request) {
 
       case "GENERAL_CHAT":
       default: {
+        // Check if this looks like a research/discovery query the keyword classifier missed
+        const lower = input.toLowerCase();
+        const looksLikeResearch = /\b(research|find|search|discover|look up|who are|golfers?|players?|committed|recruits?|prospects?)\b/.test(lower) &&
+          lower.length > 10;
+
+        if (looksLikeResearch) {
+          // Re-route to research handler
+          let discoveryResults = null;
+          try {
+            const searchQuery = `${input} golf partnership brand`.slice(0, 390);
+            const rawResult = await searchPerplexity(searchQuery);
+            if (rawResult && rawResult.trim().length > 0) {
+              if (hasClaudeKey) {
+                try {
+                  const structurePrompt = `Parse the following search results into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
+
+Search results:
+${rawResult}
+
+Return ONLY valid JSON array, no other text.`;
+                  const structured = await askClaude(structurePrompt, {
+                    system: "You are a JSON parser. Return only valid JSON arrays.",
+                    maxTokens: 1024,
+                    temperature: 0,
+                  });
+                  discoveryResults = JSON.parse(structured);
+                } catch {
+                  discoveryResults = null;
+                }
+              }
+              if (!discoveryResults) {
+                discoveryResults = [{
+                  name: "Search Results",
+                  description: rawResult.slice(0, 500),
+                  relevance: "medium" as const,
+                  golfConnection: "See description",
+                  estimatedReach: "Unknown",
+                }];
+              }
+            }
+          } catch {
+            // Fall through to chat
+          }
+
+          if (discoveryResults && discoveryResults.length > 0) {
+            const resultsSummary = discoveryResults
+              .slice(0, 5)
+              .map((r: { name: string; description: string; relevance: string }, i: number) =>
+                `${i + 1}. ${r.name} (${r.relevance}) — ${r.description.slice(0, 100)}`
+              )
+              .join("\n");
+            response = `Found ${discoveryResults.length} result(s):\n\n${resultsSummary}\n\nResults loaded into Research Hub — switch to the Research tab to add targets to your pipeline.`;
+            action = { type: "RESEARCH_CMD", target: input, discoveryResults };
+            break;
+          }
+        }
+
         if (hasClaudeKey) {
           // Build context with pipeline state
           let pipelineContext = "";
@@ -307,9 +421,9 @@ export async function POST(request: Request) {
 
 You can answer questions about the pipeline, suggest strategies, and help with networking outreach.${pipelineContext}
 
-Keep responses concise and actionable. Use plain text, not markdown.`;
+IMPORTANT: Keep responses SHORT and actionable (2-4 sentences max). Do NOT write long lists or suggestions — just tell the user what actions you're taking or what they should do next. If the query involves finding people or research, say you'll search for them. Use plain text, not markdown.`;
 
-          response = await askClaude(input, { system, maxTokens: 1024, temperature: 0.7 });
+          response = await askClaude(input, { system, maxTokens: 300, temperature: 0.7 });
         } else {
           response = `I understood your message but the AI assistant isn't configured yet. Set ANTHROPIC_API_KEY to enable conversational responses.\n\nTip: Try commands like "status", "research [name]", "set [name] status to [value]", or "discover golf podcasts".`;
         }

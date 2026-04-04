@@ -23,12 +23,24 @@ interface HistoryEntry {
   undone?: boolean;
 }
 
+interface DiscoveryResult {
+  name: string;
+  description: string;
+  relevance: "high" | "medium" | "low";
+  golfConnection: string;
+  estimatedReach: string;
+}
+
 export interface CommandBarHandle {
   focus: () => void;
   collapse: () => boolean;
 }
 
-export const CommandBar = forwardRef<CommandBarHandle>(function CommandBar(_props, ref) {
+interface CommandBarProps {
+  onDiscoveryResults?: (results: DiscoveryResult[]) => void;
+}
+
+export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function CommandBar({ onDiscoveryResults }, ref) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -137,6 +149,11 @@ export const CommandBar = forwardRef<CommandBarHandle>(function CommandBar(_prop
       setHistory((h) => [...h, entry]);
       setLastResponse(response);
       setLastIntent(intent);
+
+      // If discovery results came back, push them to the Research panel
+      if (action?.discoveryResults && onDiscoveryResults) {
+        onDiscoveryResults(action.discoveryResults as DiscoveryResult[]);
+      }
     } catch {
       const errorMsg = "Command center offline. Try again later.";
       setHistory((h) => [...h, { input: text, response: errorMsg, intent: "ERROR", confidence: 0, timestamp: new Date() }]);
@@ -291,25 +308,27 @@ export const CommandBar = forwardRef<CommandBarHandle>(function CommandBar(_prop
 
       {/* Last response preview (when not expanded) */}
       {!expanded && lastResponse && (
-        <div className="px-4 py-1.5 border-b border-border flex items-center gap-2">
+        <div className="px-4 py-2 md:py-1.5 border-b border-border flex items-center gap-2">
           <p className="text-xs text-secondary truncate flex-1">{lastResponse}</p>
           {lastIntent && intentBadge(lastIntent)}
         </div>
       )}
 
       {/* Input bar */}
-      <div className="flex items-center gap-2 px-4 py-2.5">
+      <div className="flex items-center gap-2 md:gap-2 px-4 py-3 md:py-2.5">
         <button
           onClick={() => {
             setExpanded(!expanded);
             if (mobileExpanded && expanded) setMobileExpanded(false);
           }}
-          className="text-muted hover:text-secondary transition-colors"
+          className="text-muted hover:text-secondary transition-colors p-1"
         >
-          {expanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+          {expanded ? <ChevronDown size={18} className="md:hidden" /> : <ChevronUp size={18} className="md:hidden" />}
+          {expanded ? <ChevronDown size={16} className="hidden md:block" /> : <ChevronUp size={16} className="hidden md:block" />}
         </button>
 
-        <Terminal size={14} className="text-primary shrink-0" />
+        <Terminal size={16} className="text-primary shrink-0 md:hidden" />
+        <Terminal size={14} className="text-primary shrink-0 hidden md:block" />
 
         <input
           ref={inputRef}
@@ -320,23 +339,28 @@ export const CommandBar = forwardRef<CommandBarHandle>(function CommandBar(_prop
           onKeyDown={handleKeyDown}
           onFocus={handleMobileFocus}
           disabled={loading}
-          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-50"
+          className="flex-1 bg-transparent text-base md:text-sm outline-none placeholder:text-muted disabled:opacity-50"
         />
 
         {/* Typing indicator */}
         {loading && (
-          <span className="text-[10px] text-muted animate-pulse mr-1">Thinking...</span>
+          <span className="text-xs md:text-[10px] text-muted animate-pulse mr-1">Thinking...</span>
         )}
 
         <button
           onClick={handleSubmit}
           disabled={loading || !input.trim()}
-          className="text-primary hover:text-primary-hover disabled:text-muted transition-colors"
+          className="p-2 md:p-0 rounded-lg md:rounded-none bg-primary/10 md:bg-transparent text-primary hover:text-primary-hover disabled:text-muted transition-colors"
         >
           {loading ? (
-            <Loader2 size={16} className="animate-spin" />
+            <Loader2 size={20} className="animate-spin md:hidden" />
           ) : (
-            <Send size={16} />
+            <Send size={20} className="md:hidden" />
+          )}
+          {loading ? (
+            <Loader2 size={16} className="animate-spin hidden md:block" />
+          ) : (
+            <Send size={16} className="hidden md:block" />
           )}
         </button>
       </div>

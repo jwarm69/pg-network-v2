@@ -18,9 +18,11 @@ import {
 interface Props {
   collapsed: boolean;
   onExpand: () => void;
+  injectedResults?: DiscoveryResult[] | null;
+  onClearInjected?: () => void;
 }
 
-interface DiscoveryResult {
+export interface DiscoveryResult {
   name: string;
   description: string;
   relevance: "high" | "medium" | "low";
@@ -52,7 +54,7 @@ interface ResearchField {
   value: string;
 }
 
-export function ResearchPanel({ collapsed, onExpand }: Props) {
+export function ResearchPanel({ collapsed, onExpand, injectedResults, onClearInjected }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [discoveryResults, setDiscoveryResults] = useState<DiscoveryResult[]>([]);
@@ -96,6 +98,16 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
   useEffect(() => {
     fetchTargets();
   }, [fetchTargets]);
+
+  // Accept discovery results injected from Command Center
+  useEffect(() => {
+    if (injectedResults && injectedResults.length > 0) {
+      setDiscoveryResults(injectedResults);
+      setDiscoveryMock(false);
+      setSearchError(null);
+      onClearInjected?.();
+    }
+  }, [injectedResults, onClearInjected]);
 
   if (collapsed) {
     return (
