@@ -51,26 +51,41 @@ function mockDiscoveryResults(query: string) {
         estimatedReach: "50M+",
       },
       {
-        name: "Callaway Golf Podcast",
-        description: "Weekly podcast covering equipment, technique, and tour news.",
-        relevance: "medium",
-        golfConnection: "Golf equipment brand with large following",
-        estimatedReach: "500K listeners",
-      },
-      {
         name: "Rick Shiels",
         description: "YouTube golf creator with equipment reviews and coaching content.",
         relevance: "high",
         golfConnection: "Golf content creator, PGA professional",
         estimatedReach: "3M+ subscribers",
       },
-    ].filter(
-      (r) =>
-        !query ||
-        r.name.toLowerCase().includes(query.toLowerCase()) ||
-        r.description.toLowerCase().includes(query.toLowerCase()) ||
-        true
-    ),
+      {
+        name: "No Laying Up",
+        description: "Popular golf media brand with podcast, video, and social content.",
+        relevance: "high",
+        golfConnection: "Golf media company covering PGA Tour and amateur golf",
+        estimatedReach: "500K+ across platforms",
+      },
+      {
+        name: "Paige Spiranac",
+        description: "Former golfer turned media personality and content creator.",
+        relevance: "high",
+        golfConnection: "Professional golfer, golf influencer",
+        estimatedReach: "4M+ Instagram",
+      },
+      {
+        name: "Erik Anders Lang",
+        description: "Golf filmmaker and host of Adventures in Golf on Skratch.",
+        relevance: "medium",
+        golfConnection: "Golf content creator focused on golf culture",
+        estimatedReach: "200K+ subscribers",
+      },
+      {
+        name: "Callaway Golf Podcast",
+        description: "Weekly podcast covering equipment, technique, and tour news.",
+        relevance: "medium",
+        golfConnection: "Golf equipment brand with large following",
+        estimatedReach: "500K listeners",
+      },
+    ],
   };
 }
 
@@ -136,12 +151,22 @@ async function handleDiscovery(query: string) {
     return NextResponse.json(mockDiscoveryResults(query));
   }
 
-  // Keep query short for Tavily (400 char limit). Context goes to Claude later.
-  const searchQuery = `${query} golf partnership brand`.slice(0, 390);
+  // Run two parallel searches: the direct query + an expanded version for more coverage
+  const directQuery = query.slice(0, 390);
+  const expandedQuery = `list of specific ${query} names people shows`.slice(0, 390);
 
-  let rawResult: string;
+  let rawResults: string[] = [];
   try {
-    rawResult = await searchPerplexity(searchQuery);
+    const searchResults = await Promise.allSettled([
+      searchPerplexity(directQuery),
+      searchPerplexity(expandedQuery),
+    ]);
+
+    for (const result of searchResults) {
+      if (result.status === "fulfilled" && result.value?.trim()) {
+        rawResults.push(result.value);
+      }
+    }
   } catch (err) {
     console.error("Search API error:", err);
     return NextResponse.json(
@@ -150,51 +175,86 @@ async function handleDiscovery(query: string) {
     );
   }
 
-  if (!rawResult || rawResult.trim().length === 0) {
+  if (rawResults.length === 0) {
     return NextResponse.json(
       { error: "Search returned empty results. Try a different query." },
       { status: 502 }
     );
   }
 
-  // Use Claude to structure the raw search results
+  const combinedRaw = rawResults.join("\n\n---\n\n");
+
+  // Use Claude to extract individual targets from the raw search data
   let results;
   const hasClaudeKey = !!process.env.ANTHROPIC_API_KEY;
 
   if (hasClaudeKey) {
     try {
-      const structurePrompt = `Parse the following search results into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
+      const structurePrompt = `The user searched for: "${query}"
 
-Search results:
-${rawResult}
+Here are raw search results:
+${combinedRaw}
 
-Return ONLY valid JSON array, no other text.`;
+Extract every distinct person, podcast, show, brand, or entity mentioned into a JSON array. Each entry MUST be a separate, specific item — never combine multiple into one entry, and never return a single generic "Search Results" entry.
+
+Each item in the array:
+- name: the specific name of the person, podcast, show, or brand
+- description: 1-2 sentence summary of who/what they are (be specific)
+- relevance: "high" | "medium" | "low" based on how well they match "${query}"
+- golfConnection: their specific connection to golf (be concrete)
+- estimatedReach: follower count, audience size, or "Unknown" if not found
+
+Return at least 5 entries if the data supports it. Return ONLY a valid JSON array, no other text.`;
 
       const structured = await askClaude(structurePrompt, {
-        system: "You are a JSON parser. Return only valid JSON arrays.",
-        maxTokens: 1024,
+        system: "You extract structured data from search results. Always return a JSON array with multiple individual entries. Never lump results into a single entry.",
+        maxTokens: 2048,
         temperature: 0,
       });
 
       results = JSON.parse(structured);
+      // Validate we got an array with proper entries
+      if (!Array.isArray(results) || results.length === 0) {
+        results = null;
+      }
     } catch (err) {
       console.error("Claude parse error:", err);
-      // Fall through to raw result fallback
       results = null;
     }
   }
 
   if (!results) {
-    // Fallback: return raw search as a single result
-    results = [
-      {
+    // Fallback: try to split raw text into individual items by line patterns
+    const lines = combinedRaw.split("\n").filter((l) => l.trim().length > 10);
+    const namePattern = /^[-*•]\s*\*?\*?([^:*]+)\*?\*?\s*[:—–-]/;
+    const extracted = lines
+      .map((line) => {
+        const match = line.match(namePattern);
+        if (match) {
+          return {
+            name: match[1].trim().replace(/\*+/g, ""),
+            description: line.replace(namePattern, "").trim().slice(0, 200),
+            relevance: "medium" as const,
+            golfConnection: "See description",
+            estimatedReach: "Unknown",
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    if (extracted.length >= 2) {
+      results = extracted;
+    } else {
+      // Last resort: split by sentences that mention names
+      results = [{
         name: "Search Results",
-        description: rawResult.slice(0, 500),
+        description: combinedRaw.slice(0, 500),
         relevance: "medium" as const,
         golfConnection: "See description",
         estimatedReach: "Unknown",
-      },
-    ];
+      }];
+    }
   }
 
   return NextResponse.json({

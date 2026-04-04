@@ -38,7 +38,7 @@ async function searchTavily(query: string): Promise<string> {
       query,
       search_depth: "advanced",
       include_answer: true,
-      max_results: 5,
+      max_results: 10,
     }),
   });
 

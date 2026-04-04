@@ -167,6 +167,87 @@ async function buildStatusSummary(): Promise<string> {
   return lines.join("\n");
 }
 
+// ─── Discovery search helper ───
+
+async function runDiscoverySearch(query: string): Promise<Array<{ name: string; description: string; relevance: string; golfConnection: string; estimatedReach: string }> | null> {
+  try {
+    const directQuery = query.slice(0, 390);
+    const expandedQuery = `list of specific ${query} names people shows`.slice(0, 390);
+
+    const searchResults = await Promise.allSettled([
+      searchPerplexity(directQuery),
+      searchPerplexity(expandedQuery),
+    ]);
+
+    const rawParts: string[] = [];
+    for (const result of searchResults) {
+      if (result.status === "fulfilled" && result.value?.trim()) {
+        rawParts.push(result.value);
+      }
+    }
+
+    if (rawParts.length === 0) return null;
+    const combinedRaw = rawParts.join("\n\n---\n\n");
+
+    const hasKey = !!process.env.ANTHROPIC_API_KEY;
+    if (hasKey) {
+      try {
+        const structurePrompt = `The user searched for: "${query}"
+
+Here are raw search results:
+${combinedRaw}
+
+Extract every distinct person, podcast, show, brand, or entity mentioned into a JSON array. Each entry MUST be a separate, specific item — never combine multiple into one entry, and never return a single generic "Search Results" entry.
+
+Each item in the array:
+- name: the specific name of the person, podcast, show, or brand
+- description: 1-2 sentence summary of who/what they are (be specific)
+- relevance: "high" | "medium" | "low" based on how well they match "${query}"
+- golfConnection: their specific connection to golf (be concrete)
+- estimatedReach: follower count, audience size, or "Unknown" if not found
+
+Return at least 5 entries if the data supports it. Return ONLY a valid JSON array, no other text.`;
+
+        const structured = await askClaude(structurePrompt, {
+          system: "You extract structured data from search results. Always return a JSON array with multiple individual entries. Never lump results into a single entry.",
+          maxTokens: 2048,
+          temperature: 0,
+        });
+
+        const parsed = JSON.parse(structured);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
+    // Fallback: try to split raw text into individual items
+    const lines = combinedRaw.split("\n").filter((l) => l.trim().length > 10);
+    const namePattern = /^[-*•]\s*\*?\*?([^:*]+)\*?\*?\s*[:—–-]/;
+    const extracted = lines
+      .map((line) => {
+        const match = line.match(namePattern);
+        if (match) {
+          return {
+            name: match[1].trim().replace(/\*+/g, ""),
+            description: line.replace(namePattern, "").trim().slice(0, 200),
+            relevance: "medium",
+            golfConnection: "See description",
+            estimatedReach: "Unknown",
+          };
+        }
+        return null;
+      })
+      .filter(Boolean) as Array<{ name: string; description: string; relevance: string; golfConnection: string; estimatedReach: string }>;
+
+    return extracted.length >= 2 ? extracted : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Main handler ───
 
 export async function POST(request: Request) {
@@ -260,65 +341,23 @@ export async function POST(request: Request) {
         break;
       }
 
-      case "RESEARCH_CMD": {
-        const name = entities.name || entities.target || input.replace(/^(research|look up|look into|find info|dig into)\s+/i, "").trim();
+      case "RESEARCH_CMD":
+      case "DISCOVERY": {
+        const name = intent === "RESEARCH_CMD"
+          ? (entities.name || entities.target || input.replace(/^(research|look up|look into|find info|dig into)\s+/i, "").trim())
+          : (entities.query || input);
 
-        // Actually trigger discovery search
-        const researchQuery = `${name} golf partnership brand`;
-        let discoveryResults = null;
-
-        try {
-          const { searchPerplexity: search, isPerplexityConfigured } = await import("@/lib/perplexity");
-          if (isPerplexityConfigured()) {
-            const rawResult = await search(researchQuery.slice(0, 390));
-            if (rawResult && rawResult.trim().length > 0) {
-              // Try to structure with Claude
-              const hasKey = !!process.env.ANTHROPIC_API_KEY;
-              if (hasKey) {
-                try {
-                  const structurePrompt = `Parse the following search results about "${name}" into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
-
-Search results:
-${rawResult}
-
-Return ONLY valid JSON array, no other text.`;
-                  const structured = await askClaude(structurePrompt, {
-                    system: "You are a JSON parser. Return only valid JSON arrays.",
-                    maxTokens: 1024,
-                    temperature: 0,
-                  });
-                  discoveryResults = JSON.parse(structured);
-                } catch {
-                  discoveryResults = null;
-                }
-              }
-
-              if (!discoveryResults) {
-                discoveryResults = [{
-                  name: "Search Results",
-                  description: rawResult.slice(0, 500),
-                  relevance: "medium" as const,
-                  golfConnection: "See description",
-                  estimatedReach: "Unknown",
-                }];
-              }
-            }
-          }
-        } catch {
-          // Fall through to text-only response
-        }
+        const discoveryResults = await runDiscoverySearch(name);
 
         if (discoveryResults && discoveryResults.length > 0) {
           const resultsSummary = discoveryResults
-            .slice(0, 5)
-            .map((r: { name: string; description: string; relevance: string }, i: number) =>
-              `${i + 1}. ${r.name} (${r.relevance}) — ${r.description.slice(0, 100)}`
-            )
+            .slice(0, 8)
+            .map((r, i) => `${i + 1}. ${r.name} — ${r.description.slice(0, 80)}`)
             .join("\n");
-          response = `Found ${discoveryResults.length} result(s) for "${name}":\n\n${resultsSummary}\n\nResults have been loaded into the Research Hub. Switch to the Research tab to add targets to your pipeline.`;
+          response = `Found ${discoveryResults.length} results for "${name}":\n\n${resultsSummary}`;
           action = { type: "RESEARCH_CMD", target: name, discoveryResults };
         } else {
-          response = `Searched for "${name}" but no structured results found. Try searching directly in the Research Hub search bar.`;
+          response = `Searched for "${name}" but couldn't extract individual results. Try a more specific query.`;
           action = { type: "RESEARCH_CMD", target: name };
         }
         break;
@@ -331,70 +370,22 @@ Return ONLY valid JSON array, no other text.`;
         break;
       }
 
-      case "DISCOVERY": {
-        const query = entities.query || input;
-        const searchQuery = `Find golf influencers, celebrities, or podcast hosts matching: ${query}. Include their name, relevance to golf, social following, and why they'd be a good networking target for a golf technology company.`;
-
-        const results = await searchPerplexity(searchQuery);
-        response = results || "No discovery results found. Try a more specific query.";
-        action = { type: "DISCOVERY", query };
-        break;
-      }
-
       case "GENERAL_CHAT":
       default: {
         // Check if this looks like a research/discovery query the keyword classifier missed
         const lower = input.toLowerCase();
-        const looksLikeResearch = /\b(research|find|search|discover|look up|who are|golfers?|players?|committed|recruits?|prospects?)\b/.test(lower) &&
+        const looksLikeResearch = /\b(research|find|search|discover|look up|who are|golfers?|players?|committed|recruits?|prospects?|podcasts?|influencers?|celebrities)\b/.test(lower) &&
           lower.length > 10;
 
         if (looksLikeResearch) {
-          // Re-route to research handler
-          let discoveryResults = null;
-          try {
-            const searchQuery = `${input} golf partnership brand`.slice(0, 390);
-            const rawResult = await searchPerplexity(searchQuery);
-            if (rawResult && rawResult.trim().length > 0) {
-              if (hasClaudeKey) {
-                try {
-                  const structurePrompt = `Parse the following search results into a JSON array. Each item should have: name (string), description (string), relevance ("high"|"medium"|"low"), golfConnection (string), estimatedReach (string).
-
-Search results:
-${rawResult}
-
-Return ONLY valid JSON array, no other text.`;
-                  const structured = await askClaude(structurePrompt, {
-                    system: "You are a JSON parser. Return only valid JSON arrays.",
-                    maxTokens: 1024,
-                    temperature: 0,
-                  });
-                  discoveryResults = JSON.parse(structured);
-                } catch {
-                  discoveryResults = null;
-                }
-              }
-              if (!discoveryResults) {
-                discoveryResults = [{
-                  name: "Search Results",
-                  description: rawResult.slice(0, 500),
-                  relevance: "medium" as const,
-                  golfConnection: "See description",
-                  estimatedReach: "Unknown",
-                }];
-              }
-            }
-          } catch {
-            // Fall through to chat
-          }
+          const discoveryResults = await runDiscoverySearch(input);
 
           if (discoveryResults && discoveryResults.length > 0) {
             const resultsSummary = discoveryResults
-              .slice(0, 5)
-              .map((r: { name: string; description: string; relevance: string }, i: number) =>
-                `${i + 1}. ${r.name} (${r.relevance}) — ${r.description.slice(0, 100)}`
-              )
+              .slice(0, 8)
+              .map((r, i) => `${i + 1}. ${r.name} — ${r.description.slice(0, 80)}`)
               .join("\n");
-            response = `Found ${discoveryResults.length} result(s):\n\n${resultsSummary}\n\nResults loaded into Research Hub — switch to the Research tab to add targets to your pipeline.`;
+            response = `Found ${discoveryResults.length} results:\n\n${resultsSummary}`;
             action = { type: "RESEARCH_CMD", target: input, discoveryResults };
             break;
           }
