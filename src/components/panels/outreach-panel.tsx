@@ -24,6 +24,7 @@ import type {
   Message,
   Target,
 } from "@/lib/db";
+import { ANGLE_ARCHETYPES } from "@/lib/brand-dna";
 
 interface Props {
   collapsed: boolean;
@@ -84,6 +85,10 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
   const [targetContactPaths, setTargetContactPaths] = useState<ContactPathData[]>([]);
   const [loadingPaths, setLoadingPaths] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
+
+  // Angle selection state
+  const [selectedContactPath, setSelectedContactPath] = useState<ContactPathData | null>(null);
+  const [selectedAngle, setSelectedAngle] = useState<string>("");
 
   // Check Gmail connection status
   useEffect(() => {
@@ -173,18 +178,47 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
     return () => { cancelled = true; };
   }, [selectedOutreachTarget]);
 
-  // Stats
-  const overdueCount = threads.filter((t) => {
-    if (t.status === "active" || t.status === "approved") {
-      const lastSent = t.messages.filter((m) => m.sent && m.sent_at)
-        .sort((a, b) => (b.sent_at || "").localeCompare(a.sent_at || ""))[0];
-      if (lastSent?.sent_at) {
-        const daysSince = (Date.now() - new Date(lastSent.sent_at).getTime()) / (1000 * 60 * 60 * 24);
-        return t.messages.find((m) => !m.sent) && daysSince > 3;
+  // Follow-up timing rules (days after previous message)
+  const FOLLOWUP_DAYS: Record<number, number> = { 2: 3, 3: 5, 4: 7, 5: 10 };
+
+  // Compute follow-up reminders
+  interface FollowUpReminder {
+    targetName: string;
+    targetId: string;
+    threadId: string;
+    messageId: string;
+    sequence: number;
+    daysOverdue: number;
+    recipientEmail: string | null;
+  }
+
+  const followUpReminders: FollowUpReminder[] = [];
+
+  threads.forEach((t) => {
+    const sentMessages = t.messages.filter((m) => m.sent && m.sent_at).sort((a, b) => (b.sent_at || "").localeCompare(a.sent_at || ""));
+    const nextUnsent = t.messages.find((m) => !m.sent);
+    const lastSent = sentMessages[0];
+
+    if (lastSent?.sent_at && nextUnsent) {
+      const daysWait = FOLLOWUP_DAYS[nextUnsent.sequence] || 3;
+      const daysSinceSent = (Date.now() - new Date(lastSent.sent_at).getTime()) / (1000 * 60 * 60 * 24);
+      const daysOverdue = Math.floor(daysSinceSent - daysWait);
+
+      if (daysOverdue >= 0) {
+        followUpReminders.push({
+          targetName: t.targets?.name || "Unknown",
+          targetId: t.target_id,
+          threadId: t.id,
+          messageId: nextUnsent.id,
+          sequence: nextUnsent.sequence,
+          daysOverdue,
+          recipientEmail: t.recipient_email,
+        });
       }
     }
-    return false;
-  }).length;
+  });
+
+  followUpReminders.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
   const responseCount = threads.filter((t) => t.messages.some((m) => m.response_text)).length;
   const draftCount = threads.filter((t) => t.status === "draft").length;
@@ -215,6 +249,7 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             targetId,
+            angle: selectedAngle || undefined,
             contactPathType: contactPath.type,
             contactPathName: contactPath.name,
             contactPathChannel: contactPath.channel,
@@ -237,7 +272,7 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
         setGeneratingPath(null);
       }
     },
-    [fetchThreads, onDataChange]
+    [fetchThreads, onDataChange, selectedAngle]
   );
 
   // Message/thread update handlers
@@ -389,9 +424,20 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
                       const conf = { high: 0, medium: 1, low: 2 };
                       return (conf[a.confidence as keyof typeof conf] ?? 2) - (conf[b.confidence as keyof typeof conf] ?? 2);
                     })
-                    .map((cp, i) => (
-                      <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border border-border bg-surface">
-                        <div className="flex-1 min-w-0">
+                    .map((cp, i) => {
+                      const isSelected = selectedContactPath?.type === cp.type && selectedContactPath?.name === cp.name;
+                      return (
+                        <button
+                          key={i}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedContactPath(isSelected ? null : cp);
+                            setSelectedAngle("");
+                          }}
+                          className={`w-full text-left p-2.5 rounded-lg border transition-colors ${
+                            isSelected ? "border-primary bg-primary/5" : "border-border bg-surface hover:border-primary/30"
+                          }`}
+                        >
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="text-[10px] font-bold uppercase">
                               {cp.type === "direct" ? "Direct" : cp.type === "agent" ? "Agent" : "Wildcard"}
@@ -404,6 +450,7 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
                               {cp.confidence}
                             </span>
                             {i === 0 && <span className="text-[9px] font-bold text-primary">RECOMMENDED</span>}
+                            {isSelected && <span className="text-[9px] font-bold text-primary ml-auto">SELECTED</span>}
                           </div>
                           <p className="text-xs font-medium truncate">{cp.name}</p>
                           <p className="text-[10px] text-muted truncate">{cp.role}</p>
@@ -423,24 +470,56 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
                               </span>
                             )}
                           </div>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenerateForPath(selectedOutreachTarget, cp);
-                          }}
-                          disabled={generating}
-                          className="shrink-0 px-3 py-2 text-[11px] font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-1"
-                        >
-                          {generating && generatingPath === cp.type ? (
-                            <><Loader2 size={10} className="animate-spin" /> Drafting...</>
-                          ) : (
-                            <><Zap size={10} /> Draft</>
-                          )}
                         </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                 </div>
+              )}
+
+              {/* Step 3: Angle selection (only after contact path is chosen) */}
+              {selectedContactPath && (
+                <div>
+                  <label className="text-[10px] text-muted uppercase tracking-wider block mb-2">
+                    Choose Your Angle
+                  </label>
+                  <div className="space-y-1.5">
+                    {ANGLE_ARCHETYPES.map((angle) => (
+                      <button
+                        key={angle.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAngle(selectedAngle === angle.name ? "" : angle.name);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                          selectedAngle === angle.name
+                            ? "border-primary bg-primary/10"
+                            : "border-border hover:border-primary/30"
+                        }`}
+                      >
+                        <p className="text-xs font-semibold">{angle.name}</p>
+                        <p className="text-[10px] text-muted">{angle.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Generate button (only after both are selected) */}
+              {selectedContactPath && selectedAngle && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleGenerateForPath(selectedOutreachTarget, selectedContactPath);
+                  }}
+                  disabled={generating}
+                  className="w-full py-2.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  {generating ? (
+                    <><Loader2 size={12} className="animate-spin" /> Generating outreach...</>
+                  ) : (
+                    <><Zap size={12} /> Generate {selectedContactPath.type} outreach with &ldquo;{selectedAngle}&rdquo;</>
+                  )}
+                </button>
               )}
             </div>
           )}
@@ -457,10 +536,41 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
       <div className="mb-4">
         <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Action Required</h3>
         <div className="space-y-2">
-          <ActionCard icon={<AlertCircle size={14} className="text-danger" />} label="Overdue follow-ups" count={overdueCount} color="danger" />
+          <ActionCard icon={<AlertCircle size={14} className="text-danger" />} label="Overdue follow-ups" count={followUpReminders.length} color="danger" />
           <ActionCard icon={<MessageCircle size={14} className="text-success" />} label="New responses" count={responseCount} color="success" />
           <ActionCard icon={<Clock size={14} className="text-warning" />} label="Drafts to review" count={draftCount} color="warning" />
         </div>
+
+        {/* Follow-up detail list */}
+        {followUpReminders.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {followUpReminders.slice(0, 5).map((r) => (
+              <div key={r.messageId} className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-danger/5 border border-danger/10">
+                <AlertCircle size={10} className="text-danger shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-medium truncate">
+                    <span className="font-bold">{r.targetName}</span>
+                    <span className="text-muted"> — M{r.sequence} due</span>
+                    {r.daysOverdue > 0 && <span className="text-danger"> ({r.daysOverdue}d overdue)</span>}
+                  </p>
+                </div>
+                {gmailConnected && r.recipientEmail && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const thread = threads.find((t) => t.id === r.threadId);
+                      const msg = thread?.messages.find((m) => m.id === r.messageId);
+                      if (msg) handlePushToGmail(msg.id, r.recipientEmail!, msg.subject, msg.body);
+                    }}
+                    className="shrink-0 text-[9px] font-semibold bg-success/10 text-success px-2 py-1 rounded hover:bg-success/20"
+                  >
+                    Push M{r.sequence}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Active threads */}

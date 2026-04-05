@@ -140,7 +140,23 @@ export default function Dashboard() {
       </main>
 
       {/* Command Bar -- always visible */}
-      <CommandBar ref={commandBarRef} />
+      <CommandBar
+        ref={commandBarRef}
+        onAction={(action) => {
+          // Navigate to the appropriate panel based on command action
+          if (action.type === "RESEARCH_CMD" || action.type === "DISCOVERY") {
+            setActivePanel("research");
+            setExpandedPanel("research");
+            triggerRefresh();
+          } else if (action.type === "MESSAGE_CMD") {
+            setActivePanel("outreach");
+            setExpandedPanel("outreach");
+            triggerRefresh();
+          } else if (action.type === "UPDATE_FIELD") {
+            triggerRefresh();
+          }
+        }}
+      />
     </div>
   );
 }

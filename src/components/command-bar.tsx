@@ -28,7 +28,11 @@ export interface CommandBarHandle {
   collapse: () => boolean;
 }
 
-export const CommandBar = forwardRef<CommandBarHandle>(function CommandBar(_props, ref) {
+interface CommandBarProps {
+  onAction?: (action: CommandAction) => void;
+}
+
+export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function CommandBar({ onAction }, ref) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -137,6 +141,11 @@ export const CommandBar = forwardRef<CommandBarHandle>(function CommandBar(_prop
       setHistory((h) => [...h, entry]);
       setLastResponse(response);
       setLastIntent(intent);
+
+      // Dispatch action to parent for cross-panel navigation
+      if (action && onAction) {
+        onAction(action);
+      }
     } catch {
       const errorMsg = "Command center offline. Try again later.";
       setHistory((h) => [...h, { input: text, response: errorMsg, intent: "ERROR", confidence: 0, timestamp: new Date() }]);
