@@ -162,65 +162,109 @@ function buildExampleResponse(targetName: string) {
   };
 }
 
-// ─── Claude prompt for generating 3-lane outreach ───
+// ─── Context-aware outreach prompt ───
+// The tone, framing, and content change based on WHO we're reaching out to:
+// - "direct" → peer-to-peer, casual, reference their work, Brixton signs off
+// - "agent" → business-formal, reference Brixton's credentials, team signs off
+// - "wildcard" → creative, pattern-interrupt, conversational
 
 function buildOutreachPrompt(
   targetName: string,
   targetType: string,
   researchSummary: string,
-  angle: string
+  angle: string,
+  contactPath?: { type: string; name: string; channel: string; email?: string; role?: string }
 ): string {
-  return `Generate a 3-lane outreach campaign for the following target. Each lane should have a 5-message sequence.
+  const pathType = contactPath?.type || "direct";
+  const recipientName = contactPath?.name || targetName;
+  const recipientRole = contactPath?.role || "";
+  const channel = contactPath?.channel || "email";
 
-TARGET: ${targetName}
-TYPE: ${targetType}
+  // Context-specific instructions
+  let contextInstructions = "";
+  let laneOverride = "";
+
+  if (pathType === "agent") {
+    contextInstructions = `You are writing TO ${recipientName} (${recipientRole}), who is the AGENT/REPRESENTATIVE of ${targetName}.
+
+CRITICAL CONTEXT: This is a BUSINESS email to a gatekeeper, NOT a casual message to the target.
+- Open by clearly stating who Brixton is and why you're reaching out about ${targetName}
+- Lead with credentials: $120M+ company, Forbes #1 Golf Company, 800K+ golfers
+- Make the VALUE PROP for their client clear (what's in it for ${targetName}?)
+- Be respectful of their time — they get hundreds of pitches
+- Sign off as "Team Performance Golf" or "Brixton Marr, CEO, Performance Golf"
+- Include specific ask: "15-minute call to discuss a potential partnership"`;
+    laneOverride = `Generate a SINGLE outreach lane for the agent path.
+Lane: "agent", Channel: "email", Recipient: ${recipientName}`;
+  } else if (pathType === "wildcard") {
+    contextInstructions = `You are writing via a WILDCARD/CREATIVE path — this could be through ${recipientName} (${recipientRole}).
+
+CRITICAL CONTEXT: This is an unconventional approach, NOT a standard pitch.
+- Be creative and unexpected — pattern interrupt
+- If going through a mutual connection, reference the shared context
+- If going through a foundation/charity, lead with shared values
+- Keep it conversational, not corporate
+- Sign off as "Brixton"`;
+    laneOverride = `Generate a SINGLE outreach lane for the wildcard path.
+Lane: "wildcard", Channel: "${channel}", Via: ${recipientName}`;
+  } else {
+    contextInstructions = `You are writing DIRECTLY to ${targetName} from Brixton, peer-to-peer.
+
+CRITICAL CONTEXT: This is a personal, casual message from one achiever to another.
+- Reference THEIR specific work, achievements, recent activity from the research
+- Brixton is NOT asking for a favor — he's offering a genuine opportunity
+- Sound like a human texting a peer, not a marketer writing copy
+- Never start with "I" — open with something about THEM
+- Sign off as "Brixton"`;
+    laneOverride = `Generate a SINGLE outreach lane for the direct path.
+Lane: "direct", Channel: "${channel}"`;
+  }
+
+  return `${contextInstructions}
+
+TARGET: ${targetName} (type: ${targetType})
+RECIPIENT: ${recipientName} ${recipientRole ? `(${recipientRole})` : ""}
+${contactPath?.email ? `EMAIL: ${contactPath.email}` : ""}
+
 RESEARCH:
 ${researchSummary}
 
-PRIMARY ANGLE: ${angle}
+ANGLE: ${angle}
 
-Generate 3 lanes:
-1. DIRECT — Brixton reaches out personally via email. Use the "${angle}" angle.
-2. AGENT — A team member reaches out on Brixton's behalf via email. More formal, references Brixton's credentials.
-3. WILDCARD — Brixton reaches out via DM. Creative, unexpected, pattern-interrupt approach. Use a different angle than direct.
+${laneOverride}
 
-For each lane, generate exactly 5 messages following PROGRESSIVE CONCISION:
-- Email: M1=${PROGRESSIVE_CONCISION.email.M1}, M2=${PROGRESSIVE_CONCISION.email.M2}, M3=${PROGRESSIVE_CONCISION.email.M3}, M4=${PROGRESSIVE_CONCISION.email.M4}, M5=${PROGRESSIVE_CONCISION.email.M5}
-- DM: M1=${PROGRESSIVE_CONCISION.dm.M1}, M2=${PROGRESSIVE_CONCISION.dm.M2}, M3=${PROGRESSIVE_CONCISION.dm.M3}, M4=${PROGRESSIVE_CONCISION.dm.M4}, M5=${PROGRESSIVE_CONCISION.dm.M5}
+Generate exactly 5 messages following PROGRESSIVE CONCISION:
+${channel === "dm" || channel === "instagram" || channel === "twitter" ? `
+- M1: ${PROGRESSIVE_CONCISION.dm.M1}
+- M2: ${PROGRESSIVE_CONCISION.dm.M2}
+- M3: ${PROGRESSIVE_CONCISION.dm.M3}
+- M4: ${PROGRESSIVE_CONCISION.dm.M4}
+- M5: ${PROGRESSIVE_CONCISION.dm.M5}
+DM constraints: M1 max ${CHANNEL_CONSTRAINTS.dm.m1MaxChars} chars` : `
+- M1: ${PROGRESSIVE_CONCISION.email.M1}
+- M2: ${PROGRESSIVE_CONCISION.email.M2}
+- M3: ${PROGRESSIVE_CONCISION.email.M3}
+- M4: ${PROGRESSIVE_CONCISION.email.M4}
+- M5: ${PROGRESSIVE_CONCISION.email.M5}
+Email constraints: subject max ${CHANNEL_CONSTRAINTS.email.subjectMaxChars} chars, M1 max ${CHANNEL_CONSTRAINTS.email.m1MaxWords} words`}
 
-CHANNEL CONSTRAINTS:
-- Email subject lines: max ${CHANNEL_CONSTRAINTS.email.subjectMaxChars} chars
-- Email M1: max ${CHANNEL_CONSTRAINTS.email.m1MaxWords} words
-- DM M1: max ${CHANNEL_CONSTRAINTS.dm.m1MaxChars} chars
-
-CRITICAL: Use the research data to personalize EVERY message. Reference specific things about ${targetName} — their work, achievements, recent activity. Generic messages are unacceptable.
+CRITICAL: Personalize EVERY message with research data. Generic messages are unacceptable.
 
 Respond in this EXACT JSON format (no markdown, no code fences):
 {
   "lanes": [
     {
-      "lane": "direct",
-      "channel": "email",
+      "lane": "${pathType}",
+      "channel": "${channel === "instagram" || channel === "twitter" ? "dm" : "email"}",
       "angle": "angle name used",
+      "recipient": "${recipientName}",
       "messages": [
-        { "sequence": 1, "subject": "subject line", "body": "message body" },
+        { "sequence": 1, "subject": "subject line (empty for DMs)", "body": "message body" },
         { "sequence": 2, "subject": "subject line", "body": "message body" },
         { "sequence": 3, "subject": "subject line", "body": "message body" },
         { "sequence": 4, "subject": "subject line", "body": "message body" },
         { "sequence": 5, "subject": "", "body": "message body" }
       ]
-    },
-    {
-      "lane": "agent",
-      "channel": "email",
-      "angle": "angle name used",
-      "messages": [...]
-    },
-    {
-      "lane": "wildcard",
-      "channel": "dm",
-      "angle": "angle name used",
-      "messages": [...]
     }
   ]
 }`;
@@ -229,7 +273,15 @@ Respond in this EXACT JSON format (no markdown, no code fences):
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { targetId, angle } = body as { targetId: string; angle?: string };
+    const { targetId, angle, contactPathType, contactPathName, contactPathChannel, contactPathEmail, contactPathRole } = body as {
+      targetId: string;
+      angle?: string;
+      contactPathType?: string;
+      contactPathName?: string;
+      contactPathChannel?: string;
+      contactPathEmail?: string;
+      contactPathRole?: string;
+    };
 
     if (!targetId) {
       return NextResponse.json({ error: "targetId is required" }, { status: 400 });
@@ -268,12 +320,22 @@ export async function POST(request: Request) {
       return NextResponse.json(example);
     }
 
+    // Build contact path context if provided
+    const contactPath = contactPathType ? {
+      type: contactPathType,
+      name: contactPathName || target.name,
+      channel: contactPathChannel || "email",
+      email: contactPathEmail,
+      role: contactPathRole,
+    } : undefined;
+
     // Generate with Claude
     const prompt = buildOutreachPrompt(
       target.name,
       target.type,
       researchSummary,
-      selectedAngle
+      selectedAngle,
+      contactPath
     );
 
     const raw = await askClaude(prompt, { maxTokens: 4096, temperature: 0.8 });
