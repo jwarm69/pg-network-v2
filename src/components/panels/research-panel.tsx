@@ -54,11 +54,14 @@ interface Dossier {
   bio: string;
   golfConnection: string;
   reach: string;
+  interests?: string;
+  bestApproach?: string;
   contactIntel: string;
   recentActivity: string;
-  sources: string[];
   partnershipAngle?: string;
+  brandHistory?: string;
   riskFlags?: string[];
+  sources: string[];
   contactPaths?: ContactPathInfo[];
 }
 
@@ -613,12 +616,17 @@ function DossierView({
             bio: fieldMap.bio || "No bio available",
             golfConnection: fieldMap.golf_connection || "Unknown",
             reach: fieldMap.reach || "Unknown",
+            interests: fieldMap.interests || "",
+            bestApproach: fieldMap.best_approach || "",
             contactIntel: fieldMap.contact_intel || "Unknown",
             recentActivity: fieldMap.recent_activity || "Unknown",
-            sources: [],
-            partnershipAngle: fieldMap.partnership_angle,
+            partnershipAngle: fieldMap.partnership_angle || "",
+            brandHistory: fieldMap.brand_history || "",
             riskFlags: fieldMap.risk_flags
               ? fieldMap.risk_flags.split("; ").filter(Boolean)
+              : [],
+            sources: fieldMap.sources
+              ? fieldMap.sources.split("\n").filter(Boolean)
               : [],
             contactPaths: data.contactPaths || [],
           });
@@ -663,13 +671,24 @@ function DossierView({
 
   return (
     <div className="mx-1 mt-1 mb-2 bg-card border border-border rounded-lg p-3 space-y-3">
+      {/* Best Approach is the #1 thing Brixton reads */}
+      {dossier.bestApproach && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-primary mb-1">
+            Best Approach
+          </p>
+          <p className="text-xs text-foreground">{dossier.bestApproach}</p>
+        </div>
+      )}
       <DossierSection label="Bio" value={dossier.bio} />
       <DossierSection label="Golf Connection" value={dossier.golfConnection} />
       <DossierSection label="Reach" value={dossier.reach} />
+      {dossier.interests && <DossierSection label="Interests & Causes" value={dossier.interests} />}
       <DossierSection label="Recent Activity" value={dossier.recentActivity} />
       {dossier.partnershipAngle && (
         <DossierSection label="Partnership Angle" value={dossier.partnershipAngle} />
       )}
+      {dossier.brandHistory && <DossierSection label="Brand Deal History" value={dossier.brandHistory} />}
       {dossier.contactPaths && dossier.contactPaths.length > 0 && (
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-2">
