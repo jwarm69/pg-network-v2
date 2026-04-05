@@ -272,10 +272,10 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
 
   if (selectedTarget) {
     return (
-      <div className="p-4 h-full flex flex-col">
+      <div className="p-3 md:p-4 h-full flex flex-col">
         <button
           onClick={() => setSelectedId(null)}
-          className="flex items-center gap-1 text-xs text-muted hover:text-secondary mb-4"
+          className="flex items-center gap-1 text-xs text-muted hover:text-secondary mb-3 md:mb-4 mobile-press"
         >
           <ChevronLeft size={14} /> Back to list
         </button>
@@ -423,9 +423,9 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
   // ─── List view ───
 
   return (
-    <div className="p-4 h-full flex flex-col">
+    <div className="p-3 md:p-4 h-full flex flex-col">
       {/* Panel header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3 md:mb-4">
         <div className="flex items-center gap-2">
           <Database size={16} className="text-primary" />
           <h2 className="text-sm font-bold uppercase tracking-wider">Leads</h2>
@@ -436,7 +436,7 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-2 mb-3 md:mb-4">
         <MiniStat label="Total" value={String(totalCount)} />
         <MiniStat label="Active" value={String(activeCount)} />
         <MiniStat label="Contacted" value={String(contactedCount)} />
@@ -453,12 +453,12 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
           placeholder="Filter leads..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 text-sm bg-input border border-border rounded-lg outline-none focus:border-primary transition-colors"
+          className="w-full pl-8 pr-3 py-2.5 md:py-2 text-sm bg-input border border-border rounded-xl md:rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
         />
       </div>
 
       {/* Sort controls */}
-      <div className="flex items-center gap-1 mb-3 flex-wrap">
+      <div className="flex items-center gap-1.5 md:gap-1 mb-3 flex-wrap">
         <ArrowUpDown size={11} className="text-muted mr-0.5" />
         {(
           [
@@ -472,7 +472,7 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
           <button
             key={field}
             onClick={() => toggleSort(field)}
-            className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+            className={`text-[10px] px-2.5 md:px-2 py-1 md:py-0.5 rounded-full transition-colors ${
               sortField === field
                 ? "bg-primary/15 text-primary font-semibold"
                 : "text-muted hover:text-secondary"
@@ -543,7 +543,7 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
       ) : (
         <button
           onClick={() => setShowAddForm(true)}
-          className="mt-2 w-full py-2.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary-hover transition-colors flex items-center justify-center gap-1"
+          className="mt-2 w-full py-3 md:py-2.5 bg-primary text-white rounded-xl md:rounded-lg text-xs font-semibold hover:bg-primary-hover transition-colors flex items-center justify-center gap-1 mobile-press"
         >
           <Plus size={14} /> Add Lead
         </button>
@@ -572,9 +572,9 @@ function TargetRow({
   onCancelDelete: () => void;
 }) {
   return (
-    <div className="group bg-card hover:bg-card/80 rounded-lg p-2.5 transition-colors">
+    <div className="group bg-card hover:bg-card-hover rounded-xl md:rounded-lg p-3 md:p-2.5 transition-colors mobile-press">
       {/* Top row — clickable for detail */}
-      <div className="flex items-center gap-2 cursor-pointer" onClick={onSelect}>
+      <div className="flex items-center gap-2.5 md:gap-2 cursor-pointer" onClick={onSelect}>
         <Star
           size={12}
           className={`shrink-0 ${priorityIndicator(target.priority)}`}
@@ -596,7 +596,7 @@ function TargetRow({
       </div>
 
       {/* Bottom row — inline controls */}
-      <div className="flex items-center gap-1.5 mt-1.5 pl-5">
+      <div className="flex items-center gap-2 md:gap-1.5 mt-2 md:mt-1.5 pl-5">
         <select
           value={target.status}
           onChange={(e) => {
@@ -604,7 +604,7 @@ function TargetRow({
             onStatusChange(e.target.value as TargetStatus);
           }}
           onClick={(e) => e.stopPropagation()}
-          className="text-[10px] bg-transparent border border-border rounded px-1.5 py-0.5 outline-none focus:border-primary cursor-pointer appearance-none"
+          className="text-[10px] bg-transparent border border-border rounded-lg md:rounded px-2 md:px-1.5 py-1 md:py-0.5 outline-none focus:border-primary cursor-pointer appearance-none"
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
@@ -620,7 +620,7 @@ function TargetRow({
             onPriorityChange(e.target.value as Priority);
           }}
           onClick={(e) => e.stopPropagation()}
-          className="text-[10px] bg-transparent border border-border rounded px-1.5 py-0.5 outline-none focus:border-primary cursor-pointer appearance-none"
+          className="text-[10px] bg-transparent border border-border rounded-lg md:rounded px-2 md:px-1.5 py-1 md:py-0.5 outline-none focus:border-primary cursor-pointer appearance-none"
         >
           {PRIORITY_OPTIONS.map((p) => (
             <option key={p} value={p}>
@@ -793,8 +793,8 @@ function AddLeadForm({
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-center p-2 bg-card rounded-lg">
-      <p className="text-lg font-bold">{value}</p>
+    <div className="text-center p-2.5 md:p-2 bg-card rounded-xl md:rounded-lg">
+      <p className="text-lg font-bold tabular-nums">{value}</p>
       <p className="text-[10px] text-muted uppercase tracking-wider">
         {label}
       </p>

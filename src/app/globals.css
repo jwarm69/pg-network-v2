@@ -4,6 +4,7 @@
   --color-background: #0D0D0D;
   --color-foreground: #F5F5F5;
   --color-card: #1A1A1A;
+  --color-card-hover: #222222;
   --color-input: #242424;
   --color-border: #2a2a2a;
   --color-border-light: #333333;
@@ -23,6 +24,8 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Scrollbar */
@@ -30,6 +33,12 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Hide scrollbar on mobile for cleaner look */
+@media (max-width: 767px) {
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
 
 /* Toast slide-in animation */
 @keyframes slideIn {
@@ -50,4 +59,30 @@ body {
 }
 .animate-stat-pulse {
   animation: statPulse 0.4s ease-in-out;
+}
+
+/* Mobile panel transition */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+/* Active press state for mobile touch */
+@media (max-width: 767px) {
+  .mobile-press:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
+  .mobile-press {
+    transition: transform 0.1s ease, opacity 0.1s ease;
+  }
 }

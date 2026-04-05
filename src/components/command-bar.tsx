@@ -258,23 +258,30 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
   return (
     <div
       className={`border-t border-border bg-card shrink-0 transition-all duration-200 ${
-        mobileExpanded ? "md:relative fixed inset-x-0 bottom-0 z-50 max-h-[85vh] flex flex-col" : ""
+        mobileExpanded ? "md:relative fixed inset-x-0 bottom-0 z-50 max-h-[85vh] flex flex-col rounded-t-2xl md:rounded-none shadow-2xl md:shadow-none" : ""
       }`}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       {/* Mobile overlay backdrop */}
       {mobileExpanded && (
         <div
-          className="md:hidden fixed inset-0 bg-black/40 -z-10"
+          className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-sm -z-10"
           onClick={() => setMobileExpanded(false)}
         />
+      )}
+
+      {/* Mobile drag handle */}
+      {mobileExpanded && (
+        <div className="md:hidden flex justify-center pt-2 pb-1">
+          <div className="w-8 h-1 rounded-full bg-border-light" />
+        </div>
       )}
 
       {/* Expandable history */}
       {expanded && (
         <div
           ref={historyRef}
-          className={`overflow-y-auto border-b border-border px-4 py-2 space-y-3 ${
+          className={`overflow-y-auto hide-scrollbar border-b border-border px-4 py-2 space-y-3 ${
             mobileExpanded ? "flex-1 max-h-[70vh]" : "max-h-64"
           }`}
         >
@@ -307,13 +314,13 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
       )}
 
       {/* Input bar */}
-      <div className="flex items-center gap-2 px-4 py-2.5">
+      <div className="flex items-center gap-2.5 md:gap-2 px-4 py-3 md:py-2.5">
         <button
           onClick={() => {
             setExpanded(!expanded);
             if (mobileExpanded && expanded) setMobileExpanded(false);
           }}
-          className="text-muted hover:text-secondary transition-colors"
+          className="text-muted hover:text-secondary transition-colors p-0.5"
         >
           {expanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </button>
@@ -323,7 +330,7 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search, command, or ask anything... (\u2318K)"
+          placeholder={mobileExpanded ? "Type a command..." : "Command... (\u2318K)"}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -340,12 +347,12 @@ export const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function
         <button
           onClick={handleSubmit}
           disabled={loading || !input.trim()}
-          className="text-primary hover:text-primary-hover disabled:text-muted transition-colors"
+          className="text-primary hover:text-primary-hover disabled:text-muted transition-colors p-1 -mr-1"
         >
           {loading ? (
-            <Loader2 size={16} className="animate-spin" />
+            <Loader2 size={18} className="animate-spin" />
           ) : (
-            <Send size={16} />
+            <Send size={18} />
           )}
         </button>
       </div>

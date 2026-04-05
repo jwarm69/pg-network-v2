@@ -5,6 +5,7 @@ import { ResearchPanel } from "@/components/panels/research-panel";
 import { OutreachPanel } from "@/components/panels/outreach-panel";
 import { DatabasePanel } from "@/components/panels/database-panel";
 import { CommandBar, type CommandBarHandle } from "@/components/command-bar";
+import { FlaskConical, Send, Database } from "lucide-react";
 
 type Panel = "research" | "outreach" | "database";
 
@@ -31,14 +32,12 @@ export default function Dashboard() {
     function handleKeyDown(e: KeyboardEvent) {
       const meta = e.metaKey || e.ctrlKey;
 
-      // Cmd+K: Focus command bar (already handled in command-bar but we keep it here as well for escape flow)
       if (meta && e.key === "k") {
         e.preventDefault();
         commandBarRef.current?.focus();
         return;
       }
 
-      // Cmd+1/2/3: Switch panels
       if (meta && e.key >= "1" && e.key <= "3") {
         e.preventDefault();
         const idx = parseInt(e.key) - 1;
@@ -46,7 +45,6 @@ export default function Dashboard() {
         return;
       }
 
-      // Escape: Collapse expanded panel or command bar
       if (e.key === "Escape") {
         if (commandBarRef.current?.collapse()) return;
         if (expandedPanel) {
@@ -61,13 +59,21 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="bg-card border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-lg font-extrabold text-primary tracking-tight">PG Network</h1>
-          <p className="text-[10px] font-medium uppercase tracking-widest text-secondary">
-            Networking Intelligence
-          </p>
+      {/* Header — compact on mobile, spacious on desktop */}
+      <header className="bg-card border-b border-border px-4 md:px-6 py-2.5 md:py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 md:w-auto md:h-auto rounded-lg md:rounded-none bg-primary/10 md:bg-transparent flex items-center justify-center md:block">
+            <h1 className="text-sm md:text-lg font-extrabold text-primary tracking-tight leading-none">PG</h1>
+          </div>
+          <div className="hidden md:block">
+            <h1 className="text-lg font-extrabold text-primary tracking-tight">PG Network</h1>
+            <p className="text-[10px] font-medium uppercase tracking-widest text-secondary">
+              Networking Intelligence
+            </p>
+          </div>
+          <div className="md:hidden">
+            <h1 className="text-base font-extrabold text-primary tracking-tight leading-tight">Network</h1>
+          </div>
         </div>
         <StatusLine />
       </header>
@@ -129,10 +135,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Mobile: single active panel with swipe */}
-        <div
-          className="md:hidden flex-1 overflow-y-auto"
-        >
+        {/* Mobile: single active panel with animation */}
+        <div className="md:hidden flex-1 overflow-y-auto hide-scrollbar animate-fade-in-up" key={activePanel}>
           {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
           {activePanel === "outreach" && <OutreachPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
           {activePanel === "database" && <DatabasePanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
@@ -143,7 +147,6 @@ export default function Dashboard() {
       <CommandBar
         ref={commandBarRef}
         onAction={(action) => {
-          // Navigate to the appropriate panel based on command action
           if (action.type === "RESEARCH_CMD" || action.type === "DISCOVERY") {
             setActivePanel("research");
             setExpandedPanel("research");
@@ -268,16 +271,22 @@ function StatusLine() {
           active
         </button>
       </div>
-      {/* Mobile version — single line */}
-      <div className="sm:hidden text-[10px] text-secondary">
-        <span className="font-semibold text-foreground">{counts.overdue}</span>
-        <span className="text-danger">&darr;</span>
-        {" / "}
-        <span className="font-semibold text-foreground">{counts.responses}</span>
-        <span className="text-success">&uarr;</span>
-        {" / "}
-        <span className="font-semibold text-foreground">{counts.active}</span>
-        <span className="text-info">&bull;</span>
+      {/* Mobile version — pill badges */}
+      <div className="sm:hidden flex items-center gap-1.5">
+        {counts.overdue > 0 && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold bg-danger/15 text-danger px-2 py-0.5 rounded-full">
+            {counts.overdue}
+            <span className="text-[8px] uppercase">due</span>
+          </span>
+        )}
+        <span className="flex items-center gap-1 text-[10px] font-semibold bg-success/15 text-success px-2 py-0.5 rounded-full">
+          {counts.responses}
+          <span className="text-[8px] uppercase">rsp</span>
+        </span>
+        <span className="flex items-center gap-1 text-[10px] font-semibold bg-info/15 text-info px-2 py-0.5 rounded-full">
+          {counts.active}
+          <span className="text-[8px] uppercase">act</span>
+        </span>
       </div>
     </>
   );
@@ -326,35 +335,48 @@ function MobileTabBar({
     return () => clearInterval(interval);
   }, []);
 
-  const labels: Record<Panel, string> = {
-    research: "Research",
-    outreach: "Outreach",
-    database: "Leads",
+  const tabs: Record<Panel, { label: string; icon: React.ReactNode }> = {
+    research: { label: "Research", icon: <FlaskConical size={16} /> },
+    outreach: { label: "Outreach", icon: <Send size={16} /> },
+    database: { label: "Leads", icon: <Database size={16} /> },
   };
 
   return (
     <nav
-      className="md:hidden flex border-b border-border bg-card"
+      className="md:hidden flex border-b border-border bg-card/80 backdrop-blur-sm"
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
-      {PANEL_ORDER.map((p) => (
-        <button
-          key={p}
-          onClick={() => onSwitch(p)}
-          className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider transition-colors relative ${
-            activePanel === p
-              ? "text-primary border-b-2 border-primary"
-              : "text-muted hover:text-secondary"
-          }`}
-        >
-          {labels[p]}
-          {badgeCounts[p] > 0 && (
-            <span className="absolute top-1.5 right-1/4 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-bold bg-primary text-white rounded-full leading-none">
-              {badgeCounts[p] > 99 ? "99+" : badgeCounts[p]}
-            </span>
-          )}
-        </button>
-      ))}
+      {PANEL_ORDER.map((p) => {
+        const isActive = activePanel === p;
+        const tab = tabs[p];
+        return (
+          <button
+            key={p}
+            onClick={() => onSwitch(p)}
+            className={`flex-1 py-2.5 flex flex-col items-center gap-1 transition-all duration-200 relative mobile-press ${
+              isActive
+                ? "text-primary"
+                : "text-muted active:text-secondary"
+            }`}
+          >
+            <div className={`relative ${isActive ? "text-primary" : ""}`}>
+              {tab.icon}
+              {badgeCounts[p] > 0 && (
+                <span className={`absolute -top-1.5 -right-3 min-w-[14px] h-3.5 px-1 flex items-center justify-center text-[8px] font-bold rounded-full leading-none ${
+                  isActive ? "bg-primary text-white" : "bg-muted/30 text-secondary"
+                }`}>
+                  {badgeCounts[p] > 99 ? "99+" : badgeCounts[p]}
+                </span>
+              )}
+            </div>
+            <span className="text-[9px] font-semibold uppercase tracking-wider">{tab.label}</span>
+            {/* Active indicator bar */}
+            {isActive && (
+              <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-full" />
+            )}
+          </button>
+        );
+      })}
     </nav>
   );
 }

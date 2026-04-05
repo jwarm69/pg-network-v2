@@ -347,14 +347,14 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
 
   // ─── Main panel ───
   return (
-    <div className="p-4 h-full flex flex-col" onClick={onExpand}>
+    <div className="p-3 md:p-4 h-full flex flex-col" onClick={onExpand}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3 md:mb-4">
         <div className="flex items-center gap-2">
           <Send size={16} className="text-primary" />
           <h2 className="text-sm font-bold uppercase tracking-wider">Outreach</h2>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); setShowGenerator(!showGenerator); }} className="text-xs text-primary hover:text-primary-hover font-semibold flex items-center gap-1">
+        <button onClick={(e) => { e.stopPropagation(); setShowGenerator(!showGenerator); }} className="text-xs text-primary hover:text-primary-hover font-semibold flex items-center gap-1 bg-primary/10 px-2.5 py-1.5 md:px-0 md:py-0 md:bg-transparent rounded-lg md:rounded-none mobile-press">
           <Zap size={12} /> {showGenerator ? "Close" : "New Outreach"}
         </button>
       </div>
@@ -512,7 +512,7 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
                     handleGenerateForPath(selectedOutreachTarget, selectedContactPath);
                   }}
                   disabled={generating}
-                  className="w-full py-2.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                  className="w-full py-3 md:py-2.5 bg-primary text-white rounded-xl md:rounded-lg text-xs font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1 mobile-press"
                 >
                   {generating ? (
                     <><Loader2 size={12} className="animate-spin" /> Generating outreach...</>
@@ -598,10 +598,10 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
               const recipientEmail = activeThread?.recipient_email;
 
               return (
-                <div key={targetId} className="rounded-lg border border-border bg-card overflow-hidden">
+                <div key={targetId} className="rounded-xl md:rounded-lg border border-border bg-card overflow-hidden mobile-press">
                   <button
                     onClick={(e) => { e.stopPropagation(); setSelectedTarget(target); }}
-                    className="w-full text-left p-3 hover:bg-card/80 transition-colors"
+                    className="w-full text-left p-3 hover:bg-card-hover transition-colors"
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold text-foreground truncate">{target.name}</span>
@@ -655,10 +655,10 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4 pt-2 mt-2 border-t border-border text-[10px] text-muted">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" /> Direct</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-info" /> Agent</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-warning" /> Wildcard</span>
+      <div className="flex justify-center gap-5 md:gap-4 pt-2 mt-2 border-t border-border text-[10px] text-muted">
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary" /> Direct</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-info" /> Agent</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-warning" /> Wildcard</span>
       </div>
     </div>
   );
@@ -667,12 +667,12 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
 function ActionCard({ icon, label, count, color }: { icon: React.ReactNode; label: string; count: number; color: string }) {
   const bgColors: Record<string, string> = { danger: "bg-danger/5 border-danger/10", success: "bg-success/5 border-success/10", warning: "bg-warning/5 border-warning/10" };
   return (
-    <div className={`flex items-center justify-between p-3 rounded-lg border ${bgColors[color] || "bg-card border-border"}`}>
-      <div className="flex items-center gap-2">
+    <div className={`flex items-center justify-between p-3 rounded-xl md:rounded-lg border ${bgColors[color] || "bg-card border-border"}`}>
+      <div className="flex items-center gap-2.5 md:gap-2">
         {icon}
         <span className="text-xs font-medium">{label}</span>
       </div>
-      <span className="text-sm font-bold">{count}</span>
+      <span className="text-sm font-bold tabular-nums">{count}</span>
     </div>
   );
 }

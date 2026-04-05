@@ -255,9 +255,9 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
   }
 
   return (
-    <div className="p-4 h-full flex flex-col" onClick={onExpand}>
+    <div className="p-3 md:p-4 h-full flex flex-col" onClick={onExpand}>
       {/* Panel header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3 md:mb-4">
         <div className="flex items-center gap-2">
           <FlaskConical size={16} className="text-primary" />
           <h2 className="text-sm font-bold uppercase tracking-wider">Research Hub</h2>
@@ -273,17 +273,17 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <input
             type="text"
-            placeholder="Search for targets... (e.g. 'golf podcasts', 'PGA players from Florida')"
+            placeholder="Search targets..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="w-full pl-8 pr-3 py-3 md:py-2 text-sm bg-input border border-border rounded-lg outline-none focus:border-primary transition-colors"
+            className="w-full pl-8 pr-3 py-2.5 md:py-2 text-sm bg-input border border-border rounded-xl md:rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
           />
         </div>
         <button
           onClick={handleSearch}
           disabled={searching}
-          className="px-5 md:px-3 py-3 md:py-2 text-sm md:text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 min-w-[60px] flex items-center justify-center"
+          className="px-4 md:px-3 py-2.5 md:py-2 text-sm md:text-xs font-semibold bg-primary text-white rounded-xl md:rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 min-w-[52px] flex items-center justify-center mobile-press"
         >
           {searching ? <Loader2 size={14} className="animate-spin" /> : "Go"}
         </button>
@@ -354,7 +354,7 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
       )}
 
       {/* Quick stats */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-3 md:mb-4">
         <StatCard
           label="Need Research"
           value={String(needResearchCount)}
@@ -470,7 +470,7 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
       </div>
 
       {/* Quick add */}
-      <button className="mt-2 w-full py-2 border border-dashed border-border-light rounded-lg text-xs text-muted hover:text-secondary hover:border-secondary transition-colors flex items-center justify-center gap-1">
+      <button className="mt-2 w-full py-2.5 md:py-2 border border-dashed border-border-light rounded-xl md:rounded-lg text-xs text-muted hover:text-secondary hover:border-secondary transition-colors flex items-center justify-center gap-1 mobile-press">
         <Plus size={12} /> Add target for research
       </button>
     </div>
@@ -497,10 +497,10 @@ function StatCard({
 
   return (
     <div className={`bg-card rounded-xl p-3 ${accentColors[accent] || ""}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-0.5">
         {label}
       </p>
-      <p className="text-xl font-extrabold">{value}</p>
+      <p className="text-lg md:text-xl font-extrabold">{value}</p>
     </div>
   );
 }
@@ -522,11 +522,15 @@ function DiscoveryCard({
         : "text-muted";
 
   return (
-    <div className="bg-card rounded-lg p-3 border border-border">
+    <div className="bg-card rounded-xl md:rounded-lg p-3 border border-border mobile-press">
       <div className="flex items-start justify-between gap-2 mb-1">
         <span className="font-semibold text-sm">{result.name}</span>
         <span
-          className={`text-[10px] uppercase font-bold shrink-0 ${relevanceColor}`}
+          className={`text-[10px] uppercase font-bold shrink-0 px-1.5 py-0.5 rounded-full ${
+            result.relevance === "high" ? "bg-success/15 text-success" :
+            result.relevance === "medium" ? "bg-warning/15 text-warning" :
+            "bg-muted/15 text-muted"
+          }`}
         >
           {result.relevance}
         </span>
@@ -545,7 +549,7 @@ function DiscoveryCard({
       <button
         onClick={onAdd}
         disabled={adding}
-        className="w-full py-2.5 md:py-1.5 text-xs md:text-[11px] font-semibold bg-primary/10 text-primary rounded-lg md:rounded hover:bg-primary/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+        className="w-full py-2.5 md:py-1.5 text-xs md:text-[11px] font-semibold bg-primary/10 text-primary rounded-xl md:rounded hover:bg-primary/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50 mobile-press"
       >
         {adding ? (
           <Loader2 size={10} className="animate-spin" />
@@ -568,7 +572,7 @@ function QueueItem({
   isResearching: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-card rounded-lg">
+    <div className="flex items-center gap-2.5 px-3 py-2.5 md:py-2 bg-card rounded-xl md:rounded-lg">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{target.name}</p>
         <p className="text-[10px] text-muted capitalize">
@@ -578,7 +582,7 @@ function QueueItem({
       <button
         onClick={onRunResearch}
         disabled={isResearching}
-        className="shrink-0 px-3.5 py-2.5 md:px-2.5 md:py-1.5 text-xs md:text-[11px] font-semibold bg-primary text-white rounded-lg md:rounded hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-1"
+        className="shrink-0 px-3.5 py-2 md:px-2.5 md:py-1.5 text-xs md:text-[11px] font-semibold bg-primary text-white rounded-xl md:rounded hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-1 mobile-press"
       >
         {isResearching ? (
           <>
