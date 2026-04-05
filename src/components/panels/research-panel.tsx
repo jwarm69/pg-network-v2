@@ -19,6 +19,8 @@ import {
 interface Props {
   collapsed: boolean;
   onExpand: () => void;
+  refreshKey?: number;
+  onDataChange?: () => void;
 }
 
 interface DiscoveryResult {
@@ -65,7 +67,7 @@ interface ResearchField {
   value: string;
 }
 
-export function ResearchPanel({ collapsed, onExpand }: Props) {
+export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [lastSearchQuery, setLastSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -112,7 +114,7 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
 
   useEffect(() => {
     fetchTargets();
-  }, [fetchTargets]);
+  }, [fetchTargets, refreshKey]);
 
   if (collapsed) {
     return (
@@ -206,8 +208,9 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
         setExpandedDossier(targetId);
       }
 
-      // Refresh queue
+      // Refresh queue + notify other panels
       await fetchTargets();
+      onDataChange?.();
     } catch (err) {
       setResearchError(err instanceof Error ? err.message : "Research failed");
     } finally {
@@ -234,6 +237,7 @@ export function ResearchPanel({ collapsed, onExpand }: Props) {
 
       if (res.ok) {
         await fetchTargets();
+        onDataChange?.();
         // Remove from discovery results
         setDiscoveryResults((prev) => prev.filter((r) => r.name !== result.name));
       }

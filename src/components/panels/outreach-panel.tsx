@@ -22,6 +22,8 @@ import type {
 interface Props {
   collapsed: boolean;
   onExpand: () => void;
+  refreshKey?: number;
+  onDataChange?: () => void;
 }
 
 // ─── Types for fetched data ───
@@ -40,7 +42,7 @@ interface SelectedTarget {
   score: number | null;
 }
 
-export function OutreachPanel({ collapsed, onExpand }: Props) {
+export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }: Props) {
   const [threads, setThreads] = useState<ThreadWithData[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);

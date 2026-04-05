@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ResearchPanel } from "@/components/panels/research-panel";
 import { OutreachPanel } from "@/components/panels/outreach-panel";
 import { DatabasePanel } from "@/components/panels/database-panel";
@@ -14,6 +14,8 @@ export default function Dashboard() {
   const [activePanel, setActivePanel] = useState<Panel>("outreach");
   const [expandedPanel, setExpandedPanel] = useState<Panel | null>(null);
   const commandBarRef = useRef<CommandBarHandle>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const triggerRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   function handlePanelClick(panel: Panel) {
     if (expandedPanel === panel) {
@@ -89,6 +91,8 @@ export default function Dashboard() {
             <ResearchPanel
               collapsed={expandedPanel !== null && expandedPanel !== "research"}
               onExpand={() => handlePanelClick("research")}
+              refreshKey={refreshKey}
+              onDataChange={triggerRefresh}
             />
           </div>
           <div
@@ -103,6 +107,8 @@ export default function Dashboard() {
             <OutreachPanel
               collapsed={expandedPanel !== null && expandedPanel !== "outreach"}
               onExpand={() => handlePanelClick("outreach")}
+              refreshKey={refreshKey}
+              onDataChange={triggerRefresh}
             />
           </div>
           <div
@@ -117,6 +123,8 @@ export default function Dashboard() {
             <DatabasePanel
               collapsed={expandedPanel !== null && expandedPanel !== "database"}
               onExpand={() => handlePanelClick("database")}
+              refreshKey={refreshKey}
+              onDataChange={triggerRefresh}
             />
           </div>
         </div>
@@ -125,9 +133,9 @@ export default function Dashboard() {
         <div
           className="md:hidden flex-1 overflow-y-auto"
         >
-          {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} />}
-          {activePanel === "outreach" && <OutreachPanel collapsed={false} onExpand={() => {}} />}
-          {activePanel === "database" && <DatabasePanel collapsed={false} onExpand={() => {}} />}
+          {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
+          {activePanel === "outreach" && <OutreachPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
+          {activePanel === "database" && <DatabasePanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
         </div>
       </main>
 

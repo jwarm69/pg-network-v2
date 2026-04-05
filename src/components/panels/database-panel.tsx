@@ -24,6 +24,8 @@ import type {
 interface Props {
   collapsed: boolean;
   onExpand: () => void;
+  refreshKey?: number;
+  onDataChange?: () => void;
 }
 
 type SortField = "name" | "status" | "priority" | "score" | "updated_at";
@@ -153,7 +155,7 @@ function compareFn(
 
 // ─── Main Component ───
 
-export function DatabasePanel({ collapsed, onExpand }: Props) {
+export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }: Props) {
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
@@ -179,7 +181,7 @@ export function DatabasePanel({ collapsed, onExpand }: Props) {
 
   useEffect(() => {
     fetchTargets();
-  }, [fetchTargets]);
+  }, [fetchTargets, refreshKey]);
 
   // ─── Derived data ───
 
