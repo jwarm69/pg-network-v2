@@ -215,7 +215,7 @@ async function handleTargetResearch(targetId: string) {
   // ═══════════════════════════════════════════════
   // TIER 1 SYNTHESIS: Claude builds initial dossier
   // ═══════════════════════════════════════════════
-  const tier1Prompt = `You are a world-class research analyst for celebrity/athlete networking. Build a DEEP dossier for Brixton Marr, CEO of Performance Golf ($120M+ revenue, 800K golfers, Forbes #1 Golf Company).
+  const tier1Prompt = `You are a world-class research analyst for celebrity/athlete networking. Build a DEEP dossier for Brixton Albert, CEO of Performance Golf ($120M+ revenue, 800K golfers, Forbes #1 Golf Company).
 
 TARGET: ${targetName} (type: ${targetType})
 

@@ -101,6 +101,11 @@ async function ensureSchema(): Promise<void> {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_targets_status ON targets(status);
     CREATE INDEX IF NOT EXISTS idx_targets_type ON targets(type);
     CREATE INDEX IF NOT EXISTS idx_targets_priority ON targets(priority);
@@ -528,4 +533,23 @@ export async function getMessageById(id: string): Promise<Message | null> {
   const result = await db.execute({ sql: "SELECT * FROM messages WHERE id = ?", args: [id] });
   if (result.rows.length === 0) return null;
   return rowToMessage(result.rows[0] as unknown as Record<string, unknown>);
+}
+
+// ─── Settings (key-value store) ───
+
+export async function getSetting(key: string): Promise<string | null> {
+  await ensureSchema();
+  const db = getClient();
+  const result = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: [key] });
+  if (result.rows.length === 0) return null;
+  return (result.rows[0] as unknown as { value: string }).value;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  await ensureSchema();
+  const db = getClient();
+  await db.execute({
+    sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+    args: [key, value, value],
+  });
 }

@@ -1,20 +1,37 @@
 import { NextResponse } from "next/server";
 import { isDbConfigured, getMessageById } from "@/lib/db";
-import { getAdapter } from "@/lib/send-adapter";
+import {
+  isGoogleConfigured,
+  isGmailConnected,
+  createGmailDraft,
+  sendGmailDraft,
+  checkForReplies,
+} from "@/lib/google-auth";
 
 export const dynamic = "force-dynamic";
 
-// ─── GET: adapter status ───
+// ─── GET: Gmail connection status ───
 
 export async function GET() {
-  const adapter = getAdapter();
+  const configured = isGoogleConfigured();
+  let connected = false;
+
+  if (configured) {
+    try {
+      connected = await isGmailConnected();
+    } catch {
+      connected = false;
+    }
+  }
+
   return NextResponse.json({
-    adapter: adapter.name,
-    connected: adapter.name !== "noop",
+    configured,
+    connected,
+    connectUrl: configured && !connected ? "/api/auth/google" : null,
   });
 }
 
-// ─── POST: create_draft | sync_inbox ───
+// ─── POST: create_draft | send_draft | check_replies ───
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -26,73 +43,105 @@ export async function POST(request: Request) {
 
   const { action } = body;
 
-  if (action === "create_draft") {
-    return handleCreateDraft(body);
-  }
+  if (action === "create_draft") return handleCreateDraft(body);
+  if (action === "send_draft") return handleSendDraft(body);
+  if (action === "check_replies") return handleCheckReplies(body);
 
-  if (action === "sync_inbox") {
-    return handleSyncInbox();
-  }
-
-  return NextResponse.json(
-    { error: `Unknown action: ${String(action)}` },
-    { status: 400 }
-  );
+  return NextResponse.json({ error: `Unknown action: ${String(action)}` }, { status: 400 });
 }
 
-// ─── Handlers ───
+// ─── Create Draft ───
 
 async function handleCreateDraft(body: Record<string, unknown>) {
   const messageId = body.messageId as string | undefined;
-  if (!messageId) {
-    return NextResponse.json({ error: "messageId is required" }, { status: 400 });
+  const directTo = body.to as string | undefined;
+  const directSubject = body.subject as string | undefined;
+  const directBody = body.body as string | undefined;
+
+  let to = directTo || "";
+  let subject = directSubject || "";
+  let emailBody = directBody || "";
+
+  if (messageId) {
+    if (!isDbConfigured()) {
+      return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    }
+    const message = await getMessageById(messageId);
+    if (!message) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    }
+    subject = subject || message.subject || "";
+    emailBody = emailBody || message.body || "";
   }
 
-  if (!isDbConfigured()) {
-    return NextResponse.json(
-      { error: "Database not configured" },
-      { status: 503 }
-    );
+  if (!emailBody) {
+    return NextResponse.json({ error: "No email body provided" }, { status: 400 });
   }
 
-  const message = await getMessageById(messageId);
+  const connected = await isGmailConnected();
 
-  if (!message) {
-    return NextResponse.json(
-      { error: "Message not found" },
-      { status: 404 }
-    );
+  if (!connected) {
+    return NextResponse.json({
+      success: true,
+      mode: "local",
+      note: "Gmail not connected. Draft saved locally only. Connect Gmail to create real drafts.",
+    });
   }
-
-  const adapter = getAdapter();
 
   try {
-    const result = await adapter.createDraft(
-      "",
-      message.subject || "",
-      message.body || ""
-    );
-    return NextResponse.json(result);
+    const result = await createGmailDraft(to, subject, emailBody);
+    return NextResponse.json({
+      success: true,
+      mode: "gmail",
+      draftId: result.draftId,
+      threadId: result.threadId,
+    });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { success: false, error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
 
-async function handleSyncInbox() {
-  const adapter = getAdapter();
+// ─── Send Draft ───
+
+async function handleSendDraft(body: Record<string, unknown>) {
+  const draftId = body.draftId as string | undefined;
+  if (!draftId) {
+    return NextResponse.json({ error: "draftId is required" }, { status: 400 });
+  }
+
+  const connected = await isGmailConnected();
+  if (!connected) {
+    return NextResponse.json({ error: "Gmail not connected" }, { status: 503 });
+  }
 
   try {
-    const result = await adapter.syncInbox("Performance Golf");
+    const result = await sendGmailDraft(draftId);
+    return NextResponse.json({ success: true, messageId: result.messageId });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
+  }
+}
+
+// ─── Check Replies ───
+
+async function handleCheckReplies(body: Record<string, unknown>) {
+  const threadId = body.threadId as string | undefined;
+  if (!threadId) {
+    return NextResponse.json({ error: "threadId is required" }, { status: 400 });
+  }
+
+  const connected = await isGmailConnected();
+  if (!connected) {
+    return NextResponse.json({ error: "Gmail not connected" }, { status: 503 });
+  }
+
+  try {
+    const result = await checkForReplies(threadId);
     return NextResponse.json(result);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { messages: [], error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ hasReply: false, error: errorMessage }, { status: 500 });
   }
 }

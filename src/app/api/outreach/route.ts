@@ -86,19 +86,19 @@ function buildExampleResponse(targetName: string) {
       messages: [
         {
           sequence: 1,
-          subject: `Connecting ${targetName} + Brixton Marr`,
-          body: `Reaching out on behalf of Brixton Marr, founder of Performance Golf. He noticed some overlap between ${targetName}'s work and what PG has built — 800K+ golfers, $120M+ revenue, all bootstrapped. Brixton wanted to explore whether there's a fit for a conversation.\n\nBest,\nTeam PG`,
+          subject: `Connecting ${targetName} + Brixton Albert`,
+          body: `Reaching out on behalf of Brixton Albert, founder of Performance Golf. He noticed some overlap between ${targetName}'s work and what PG has built — 800K+ golfers, $120M+ revenue, all bootstrapped. Brixton wanted to explore whether there's a fit for a conversation.\n\nBest,\nTeam PG`,
           validation: { valid: true, violations: [] },
         },
         {
           sequence: 2,
-          subject: `Re: Connecting ${targetName} + Brixton Marr`,
+          subject: `Re: Connecting ${targetName} + Brixton Albert`,
           body: `Following up briefly — Brixton's team just crossed 2M swings analyzed with their AI. Thought that context might be relevant.\n\nBest,\nTeam PG`,
           validation: { valid: true, violations: [] },
         },
         {
           sequence: 3,
-          subject: `Re: Connecting ${targetName} + Brixton Marr`,
+          subject: `Re: Connecting ${targetName} + Brixton Albert`,
           body: `Last note from our end. Happy to coordinate if the timing works.\n\nBest,\nTeam PG`,
           validation: { valid: true, violations: [] },
         },
@@ -192,7 +192,7 @@ CRITICAL CONTEXT: This is a BUSINESS email to a gatekeeper, NOT a casual message
 - Lead with credentials: $120M+ company, Forbes #1 Golf Company, 800K+ golfers
 - Make the VALUE PROP for their client clear (what's in it for ${targetName}?)
 - Be respectful of their time — they get hundreds of pitches
-- Sign off as "Team Performance Golf" or "Brixton Marr, CEO, Performance Golf"
+- Sign off as "Team Performance Golf" or "Brixton Albert, CEO, Performance Golf"
 - Include specific ask: "15-minute call to discuss a potential partnership"`;
     laneOverride = `Generate a SINGLE outreach lane for the agent path.
 Lane: "agent", Channel: "email", Recipient: ${recipientName}`;

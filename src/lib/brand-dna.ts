@@ -2,6 +2,7 @@
 
 export const BRAND = {
   name: "Brixton",
+  fullName: "Brixton Albert",
   company: "Performance Golf",
   title: "Founder & CEO",
   background: "Former Division I golfer. Built the company without outside funding.",
