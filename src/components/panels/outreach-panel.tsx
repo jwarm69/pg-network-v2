@@ -305,7 +305,7 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
             <ArrowLeft size={12} /> Back to threads
           </button>
         </div>
-        <TargetThread target={selectedTarget} threads={targetThreads} research={[]} onClose={() => setSelectedTarget(null)} onUpdateMessage={handleUpdateMessage} onUpdateThread={handleUpdateThread} />
+        <TargetThread target={selectedTarget} threads={targetThreads} research={[]} onClose={() => setSelectedTarget(null)} onUpdateMessage={handleUpdateMessage} onUpdateThread={handleUpdateThread} gmailConnected={gmailConnected} onPushToGmail={handlePushToGmail} />
       </div>
     );
   }

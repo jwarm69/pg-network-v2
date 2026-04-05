@@ -48,6 +48,8 @@ interface Props {
   onClose: () => void;
   onUpdateMessage: (messageId: string, updates: Partial<Message>) => void;
   onUpdateThread: (threadId: string, updates: Partial<OutreachThread>) => void;
+  onPushToGmail?: (messageId: string, recipientEmail: string, subject: string, body: string) => void;
+  gmailConnected?: boolean;
 }
 
 // ─── Lane config ───
@@ -83,6 +85,8 @@ export function TargetThread({
   onClose,
   onUpdateMessage,
   onUpdateThread,
+  onPushToGmail,
+  gmailConnected,
 }: Props) {
   const [expandedLanes, setExpandedLanes] = useState<Set<string>>(
     new Set(threads.map((t) => t.lane))
@@ -90,6 +94,7 @@ export function TargetThread({
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pushingId, setPushingId] = useState<string | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
 
   useEffect(() => {
@@ -422,6 +427,31 @@ export function TargetThread({
                                     <Send size={10} className="hidden md:block" />
                                     Mark Sent
                                   </button>
+                                  {gmailConnected && onPushToGmail && thread.recipient_email && (
+                                    <button
+                                      onClick={() => {
+                                        setPushingId(msg.id);
+                                        onPushToGmail(msg.id, thread.recipient_email!, msg.subject, msg.body);
+                                        setTimeout(() => setPushingId(null), 3000);
+                                      }}
+                                      disabled={pushingId === msg.id}
+                                      className="text-xs md:text-[10px] px-3 py-2 md:px-2 md:py-1 bg-success/10 text-success hover:bg-success/20 rounded-lg md:rounded transition-colors flex items-center gap-1.5 md:gap-1 min-h-[36px] md:min-h-0 font-semibold md:font-normal disabled:opacity-50"
+                                    >
+                                      {pushingId === msg.id ? (
+                                        <>
+                                          <Clock size={14} className="md:hidden" />
+                                          <Clock size={10} className="hidden md:block" />
+                                          Pushing...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Send size={14} className="md:hidden" />
+                                          <Send size={10} className="hidden md:block" />
+                                          Push to Gmail
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
                                 </>
                               )}
                               <button
