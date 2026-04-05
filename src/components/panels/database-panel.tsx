@@ -13,6 +13,11 @@ import {
   X,
   Star,
   Loader2,
+  Phone,
+  Mail,
+  ExternalLink,
+  Globe,
+  AtSign,
 } from "lucide-react";
 import type {
   Target,
@@ -306,6 +311,9 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4">
+          {/* Contact Info — auto-loaded from research */}
+          <ContactInfoSection targetId={selectedTarget.id} />
+
           {/* Fields */}
           <DetailSection title="Details">
             <DetailRow label="Channel" value={selectedTarget.channel || "—"} />
@@ -373,7 +381,7 @@ export function DatabasePanel({ collapsed, onExpand, refreshKey, onDataChange }:
             </div>
           </DetailSection>
 
-          {/* Notes / research summary */}
+          {/* Notes */}
           <DetailSection title="Notes">
             <p className="text-xs text-secondary whitespace-pre-wrap">
               {selectedTarget.notes || "No notes yet."}
@@ -816,6 +824,212 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between py-1 text-xs">
       <span className="text-muted">{label}</span>
       <span className="font-medium">{value}</span>
+    </div>
+  );
+}
+
+// ─── Contact Info Section (auto-loads from research API) ───
+
+interface ContactPathData {
+  type: string;
+  name: string;
+  role: string;
+  email: string | null;
+  channel: string;
+  confidence: string;
+  source_url: string | null;
+}
+
+interface ResearchField {
+  field: string;
+  value: string;
+}
+
+function ContactInfoSection({ targetId }: { targetId: string }) {
+  const [contactPaths, setContactPaths] = useState<ContactPathData[]>([]);
+  const [researchFields, setResearchFields] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [quality, setQuality] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/research?targetId=${targetId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+
+        if (!cancelled) {
+          setContactPaths(data.contactPaths || []);
+          if (typeof data.quality === "number") setQuality(data.quality);
+
+          const fields: Record<string, string> = {};
+          if (data.fields) {
+            data.fields.forEach((f: ResearchField) => { fields[f.field] = f.value; });
+          }
+          setResearchFields(fields);
+        }
+      } catch {
+        // No research data yet
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [targetId]);
+
+  if (loading) {
+    return (
+      <div className="bg-card rounded-lg p-3 text-center">
+        <Loader2 size={14} className="mx-auto animate-spin text-muted" />
+        <p className="text-[10px] text-muted mt-1">Loading contact info...</p>
+      </div>
+    );
+  }
+
+  const hasData = contactPaths.length > 0 || Object.keys(researchFields).length > 0;
+
+  if (!hasData) {
+    return (
+      <div className="bg-card rounded-lg p-3">
+        <h3 className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1">Contact Info</h3>
+        <p className="text-xs text-muted">No research data yet. Research this target to find contact routes.</p>
+      </div>
+    );
+  }
+
+  // Extract social handles from reach field
+  const reach = researchFields.reach || "";
+  const igMatch = reach.match(/@([A-Za-z0-9_.]+).*?(?:instagram|IG)/i) || reach.match(/instagram[^@]*@([A-Za-z0-9_.]+)/i);
+  const liMatch = reach.match(/linkedin\.com\/in\/([A-Za-z0-9-]+)/i);
+  const twMatch = reach.match(/@([A-Za-z0-9_]+).*?(?:twitter|X\b)/i) || reach.match(/(?:twitter|X\b)[^@]*@([A-Za-z0-9_]+)/i);
+
+  // Collect all emails, phones from contact paths
+  const allEmails = contactPaths.filter((cp) => cp.email).map((cp) => ({ email: cp.email!, label: cp.type === "agent" ? `${cp.name} (Agent)` : cp.name }));
+  const contactIntel = researchFields.contact_intel || "";
+  const bestApproach = researchFields.best_approach || "";
+
+  return (
+    <div className="space-y-3">
+      {/* Quality badge */}
+      {quality !== null && (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted uppercase tracking-wider">Research Quality</span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+            quality >= 75 ? "bg-success/20 text-success" :
+            quality >= 50 ? "bg-warning/20 text-warning" :
+            "bg-red-400/20 text-red-400"
+          }`}>
+            {quality}/100
+          </span>
+        </div>
+      )}
+
+      {/* Best Approach — highlighted */}
+      {bestApproach && !bestApproach.startsWith("UNKNOWN") && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-2.5">
+          <h3 className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Best Approach</h3>
+          <p className="text-xs text-foreground">{bestApproach.replace(/\s*\[SOURCE:.*?\]/g, "")}</p>
+        </div>
+      )}
+
+      {/* Contact Routes */}
+      {contactPaths.length > 0 && (
+        <DetailSection title={`Contact Routes (${contactPaths.length})`}>
+          <div className="space-y-2.5">
+            {contactPaths.map((cp, i) => (
+              <div key={i} className="border-b border-border last:border-0 pb-2 last:pb-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {cp.type === "direct" ? "Direct" : cp.type === "agent" ? "Agent / Rep" : "Wildcard"}
+                  </span>
+                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                    cp.confidence === "high" ? "bg-success/20 text-success" :
+                    cp.confidence === "medium" ? "bg-warning/20 text-warning" :
+                    "bg-muted/20 text-muted"
+                  }`}>
+                    {cp.confidence}
+                  </span>
+                </div>
+                <p className="text-xs font-medium">{cp.name}</p>
+                {cp.role && <p className="text-[10px] text-muted">{cp.role}</p>}
+
+                <div className="flex flex-wrap gap-2 mt-1.5">
+                  {cp.email && (
+                    <a href={`mailto:${cp.email}`} className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
+                      <Mail size={10} /> {cp.email}
+                    </a>
+                  )}
+                  {cp.channel === "instagram" && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-primary">
+                      <AtSign size={10} /> {cp.channel}
+                    </span>
+                  )}
+                  {cp.channel === "linkedin" && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-primary">
+                      <Globe size={10} /> {cp.channel}
+                    </span>
+                  )}
+                  {cp.channel === "phone" && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-primary">
+                      <Phone size={10} /> {cp.channel}
+                    </span>
+                  )}
+                  {cp.source_url && (
+                    <a href={cp.source_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[9px] text-primary/60 hover:underline">
+                      <ExternalLink size={8} /> source
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
+
+      {/* Quick contact summary — emails + social */}
+      <DetailSection title="Contact Summary">
+        {allEmails.length > 0 && (
+          <div className="space-y-1 mb-2">
+            {allEmails.map((e, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <Mail size={10} className="text-muted shrink-0" />
+                <a href={`mailto:${e.email}`} className="text-primary hover:underline truncate">{e.email}</a>
+                <span className="text-[9px] text-muted shrink-0">{e.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3">
+          {igMatch && (
+            <span className="inline-flex items-center gap-1 text-xs text-primary">
+              <AtSign size={12} /> @{igMatch[1]}
+            </span>
+          )}
+          {liMatch && (
+            <a href={`https://linkedin.com/in/${liMatch[1]}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+              <Globe size={12} /> {liMatch[1]}
+            </a>
+          )}
+          {twMatch && (
+            <span className="inline-flex items-center gap-1 text-xs text-primary">
+              <span className="font-bold text-[10px]">𝕏</span> @{twMatch[1]}
+            </span>
+          )}
+        </div>
+        {allEmails.length === 0 && !igMatch && !liMatch && !twMatch && (
+          <p className="text-xs text-muted">No contact details found yet.</p>
+        )}
+      </DetailSection>
+
+      {/* Contact intel summary */}
+      {contactIntel && !contactIntel.startsWith("UNKNOWN") && (
+        <DetailSection title="Contact Intel">
+          <p className="text-xs text-secondary whitespace-pre-wrap">{contactIntel.replace(/\s*\[SOURCE:.*?\]/g, "")}</p>
+        </DetailSection>
+      )}
     </div>
   );
 }
