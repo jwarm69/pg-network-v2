@@ -395,6 +395,8 @@ export async function POST(request: Request) {
           lane: lane.lane,
           channel: lane.channel,
           status: "draft",
+          recipient_name: contactPathName || null,
+          recipient_email: contactPathEmail || null,
         });
 
         const messagesToInsert = lane.messages.map((msg) => ({

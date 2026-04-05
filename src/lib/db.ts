@@ -333,13 +333,13 @@ export async function getThreads(targetId: string): Promise<OutreachThread[]> {
   return result.rows as unknown as OutreachThread[];
 }
 
-export async function createThread(thread: { target_id: string; lane: string; channel: string; status?: string }): Promise<OutreachThread> {
+export async function createThread(thread: { target_id: string; lane: string; channel: string; status?: string; recipient_name?: string | null; recipient_email?: string | null }): Promise<OutreachThread> {
   await ensureSchema();
   const db = getClient();
   const id = crypto.randomUUID();
   await db.execute({
-    sql: "INSERT INTO outreach_threads (id, target_id, lane, channel, status) VALUES (?, ?, ?, ?, ?)",
-    args: [id, thread.target_id, thread.lane, thread.channel, thread.status || "draft"],
+    sql: "INSERT INTO outreach_threads (id, target_id, lane, channel, status, recipient_name, recipient_email) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    args: [id, thread.target_id, thread.lane, thread.channel, thread.status || "draft", thread.recipient_name || null, thread.recipient_email || null],
   });
   const result = await db.execute({ sql: "SELECT * FROM outreach_threads WHERE id = ?", args: [id] });
   return result.rows[0] as unknown as OutreachThread;

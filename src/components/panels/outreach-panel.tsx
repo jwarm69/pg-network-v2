@@ -73,12 +73,32 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
   const [selectedTarget, setSelectedTarget] = useState<SelectedTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Gmail status
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailConfigured, setGmailConfigured] = useState(false);
+  const [pushingDraft, setPushingDraft] = useState<string | null>(null);
+
   // Target selector state
   const [researchedTargets, setResearchedTargets] = useState<ResearchedTarget[]>([]);
   const [selectedOutreachTarget, setSelectedOutreachTarget] = useState<string>("");
   const [targetContactPaths, setTargetContactPaths] = useState<ContactPathData[]>([]);
   const [loadingPaths, setLoadingPaths] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
+
+  // Check Gmail connection status
+  useEffect(() => {
+    async function checkGmail() {
+      try {
+        const res = await fetch("/api/gmail");
+        if (res.ok) {
+          const data = await res.json();
+          setGmailConnected(data.connected);
+          setGmailConfigured(data.configured);
+        }
+      } catch { /* empty */ }
+    }
+    checkGmail();
+  }, []);
 
   // Fetch threads
   useEffect(() => {
@@ -230,6 +250,32 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
     } catch { /* empty */ }
   }, []);
 
+  // Push message to Gmail as draft
+  const handlePushToGmail = useCallback(async (messageId: string, recipientEmail: string, subject: string, body: string) => {
+    setPushingDraft(messageId);
+    try {
+      const res = await fetch("/api/gmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create_draft", messageId, to: recipientEmail, subject, body }),
+      });
+      const data = await res.json();
+      if (data.success && data.mode === "gmail") {
+        // Mark as ready and store draft info
+        setError(null);
+        alert(`Draft created in Gmail for ${recipientEmail}`);
+      } else if (data.success && data.mode === "local") {
+        setError("Gmail not connected. Draft saved locally only.");
+      } else {
+        setError(data.error || "Failed to create Gmail draft");
+      }
+    } catch {
+      setError("Network error creating Gmail draft");
+    } finally {
+      setPushingDraft(null);
+    }
+  }, []);
+
   const handleUpdateThread = useCallback(async (threadId: string, updates: Partial<OutreachThread>) => {
     try {
       const res = await fetch("/api/outreach", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ threadId, ...updates }) });
@@ -277,6 +323,29 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
           <Zap size={12} /> {showGenerator ? "Close" : "New Outreach"}
         </button>
       </div>
+
+      {/* Gmail connection banner */}
+      {gmailConfigured && !gmailConnected && (
+        <a
+          href="/api/auth/google"
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-2 mb-3 p-2.5 rounded-lg border border-warning/20 bg-warning/5 text-xs hover:bg-warning/10 transition-colors"
+        >
+          <Mail size={14} className="text-warning shrink-0" />
+          <div className="flex-1">
+            <span className="font-semibold text-warning">Connect Gmail</span>
+            <span className="text-muted ml-1">to push drafts directly to Brixton&apos;s inbox</span>
+          </div>
+          <ChevronRight size={12} className="text-warning" />
+        </a>
+      )}
+      {gmailConnected && (
+        <div className="flex items-center gap-2 mb-3 px-2.5 py-1.5 rounded-lg bg-success/5 text-[10px] text-success">
+          <Mail size={12} />
+          <span className="font-semibold">Gmail connected</span>
+          <span className="text-muted">— drafts push to inbox</span>
+        </div>
+      )}
 
       {/* ─── Generate Outreach Section ─── */}
       {showGenerator && (
@@ -416,31 +485,59 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
               const stage = currentMsg ? `M${currentMsg.sequence}` : "Done";
               const hasResponse = targetThreads.some((t) => t.messages.some((m) => m.response_text));
 
+              const recipientEmail = activeThread?.recipient_email;
+
               return (
-                <button
-                  key={targetId}
-                  onClick={(e) => { e.stopPropagation(); setSelectedTarget(target); }}
-                  className="w-full text-left p-3 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-foreground truncate">{target.name}</span>
-                    <div className="flex items-center gap-1">
-                      {hasResponse && <span className="w-2 h-2 rounded-full bg-success" />}
+                <div key={targetId} className="rounded-lg border border-border bg-card overflow-hidden">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelectedTarget(target); }}
+                    className="w-full text-left p-3 hover:bg-card/80 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-foreground truncate">{target.name}</span>
+                      <div className="flex items-center gap-1">
+                        {hasResponse && <span className="w-2 h-2 rounded-full bg-success" />}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-muted">
-                    {targetThreads.map((t) => (
-                      <span key={t.id} className={`px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase ${
-                        t.lane === "direct" ? "bg-primary/10 text-primary" :
-                        t.lane === "agent" ? "bg-info/10 text-info" :
-                        "bg-warning/10 text-warning"
-                      }`}>
-                        {t.lane}
-                      </span>
-                    ))}
-                    <span className="ml-auto">{stage} — {activeThread?.status || "—"}</span>
-                  </div>
-                </button>
+                    <div className="flex items-center gap-2 text-[10px] text-muted">
+                      {targetThreads.map((t) => (
+                        <span key={t.id} className={`px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase ${
+                          t.lane === "direct" ? "bg-primary/10 text-primary" :
+                          t.lane === "agent" ? "bg-info/10 text-info" :
+                          "bg-warning/10 text-warning"
+                        }`}>
+                          {t.lane}
+                        </span>
+                      ))}
+                      <span className="ml-auto">{stage} — {activeThread?.status || "—"}</span>
+                    </div>
+                    {recipientEmail && (
+                      <p className="text-[10px] text-muted mt-1 truncate">
+                        <Mail size={9} className="inline mr-1" />{recipientEmail}
+                      </p>
+                    )}
+                  </button>
+
+                  {/* Push to Gmail button for next unsent message */}
+                  {gmailConnected && currentMsg && recipientEmail && (
+                    <div className="px-3 pb-2.5 pt-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePushToGmail(currentMsg.id, recipientEmail, currentMsg.subject, currentMsg.body);
+                        }}
+                        disabled={pushingDraft === currentMsg.id}
+                        className="w-full py-1.5 text-[10px] font-semibold bg-success/10 text-success rounded hover:bg-success/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        {pushingDraft === currentMsg.id ? (
+                          <><Loader2 size={10} className="animate-spin" /> Pushing...</>
+                        ) : (
+                          <><Mail size={10} /> Push {stage} to Gmail</>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
