@@ -53,11 +53,15 @@ async function ensureSchema(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS outreach_threads (
       id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
-      target_id  TEXT NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
-      lane       TEXT NOT NULL,
-      channel    TEXT NOT NULL,
-      status     TEXT NOT NULL DEFAULT 'draft',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      target_id       TEXT NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
+      lane            TEXT NOT NULL,
+      channel         TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'draft',
+      recipient_name  TEXT,
+      recipient_email TEXT,
+      gmail_thread_id TEXT,
+      gmail_draft_id  TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -166,6 +170,10 @@ export interface OutreachThread {
   lane: Lane;
   channel: string;
   status: ThreadStatus;
+  recipient_name: string | null;
+  recipient_email: string | null;
+  gmail_thread_id: string | null;
+  gmail_draft_id: string | null;
   created_at: string;
 }
 
@@ -431,6 +439,10 @@ export async function getAllThreadsWithTargets(): Promise<Array<OutreachThread &
       lane: r.lane as Lane,
       channel: r.channel as string,
       status: r.status as ThreadStatus,
+      recipient_name: (r.recipient_name as string) || null,
+      recipient_email: (r.recipient_email as string) || null,
+      gmail_thread_id: (r.gmail_thread_id as string) || null,
+      gmail_draft_id: (r.gmail_draft_id as string) || null,
       created_at: r.created_at as string,
     };
 
@@ -533,6 +545,22 @@ export async function getMessageById(id: string): Promise<Message | null> {
   const result = await db.execute({ sql: "SELECT * FROM messages WHERE id = ?", args: [id] });
   if (result.rows.length === 0) return null;
   return rowToMessage(result.rows[0] as unknown as Record<string, unknown>);
+}
+
+// ─── Gmail-tracked threads ───
+
+export async function getGmailTrackedThreads(): Promise<Array<OutreachThread & { target_name: string }>> {
+  await ensureSchema();
+  const db = getClient();
+  const result = await db.execute(
+    `SELECT ot.*, t.name as target_name
+     FROM outreach_threads ot
+     JOIN targets t ON ot.target_id = t.id
+     WHERE ot.gmail_thread_id IS NOT NULL
+       AND ot.status IN ('active', 'approved', 'draft')
+     ORDER BY ot.created_at DESC`
+  );
+  return result.rows as unknown as Array<OutreachThread & { target_name: string }>;
 }
 
 // ─── Settings (key-value store) ───
