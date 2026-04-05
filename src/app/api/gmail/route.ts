@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isDbConfigured, getMessageById } from "@/lib/db";
+import { isDbConfigured, getMessageById, updateThread } from "@/lib/db";
 import {
   isGoogleConfigured,
   isGmailConnected,
@@ -90,6 +90,18 @@ async function handleCreateDraft(body: Record<string, unknown>) {
 
   try {
     const result = await createGmailDraft(to, subject, emailBody);
+
+    // Store Gmail thread/draft IDs on the outreach thread for reply polling
+    if (messageId && isDbConfigured()) {
+      const message = await getMessageById(messageId);
+      if (message?.thread_id) {
+        await updateThread(message.thread_id, {
+          gmail_thread_id: result.threadId,
+          gmail_draft_id: result.draftId,
+        } as Partial<import("@/lib/db").OutreachThread>);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       mode: "gmail",
