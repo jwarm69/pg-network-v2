@@ -7,7 +7,7 @@ import {
   saveCommandEntry,
   type Target,
 } from "@/lib/db";
-import { searchPerplexity } from "@/lib/perplexity";
+import { searchText as searchPerplexity } from "@/lib/search-providers";
 
 // ─── Rate limiter (1 req/sec) ───
 

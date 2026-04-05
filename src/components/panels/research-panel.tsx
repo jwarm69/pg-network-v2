@@ -83,6 +83,7 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
 
   const [researchingId, setResearchingId] = useState<string | null>(null);
   const [dossiers, setDossiers] = useState<Record<string, Dossier>>({});
+  const [qualityScores, setQualityScores] = useState<Record<string, number>>({});
   const [expandedDossier, setExpandedDossier] = useState<string | null>(null);
   const [addingTarget, setAddingTarget] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -202,12 +203,14 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
       }
 
       if (data.dossier) {
-        // Include contact paths from the response
         const dossier = {
           ...data.dossier,
           contactPaths: data.contactPaths || data.dossier.contactPaths || [],
         };
         setDossiers((prev) => ({ ...prev, [targetId]: dossier }));
+        if (typeof data.quality === "number") {
+          setQualityScores((prev) => ({ ...prev, [targetId]: data.quality }));
+        }
         setExpandedDossier(targetId);
       }
 
@@ -421,6 +424,15 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
                       <span className="font-medium truncate flex-1">
                         {target.name}
                       </span>
+                      {qualityScores[target.id] !== undefined && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          qualityScores[target.id] >= 75 ? "bg-success/20 text-success" :
+                          qualityScores[target.id] >= 50 ? "bg-warning/20 text-warning" :
+                          "bg-red-400/20 text-red-400"
+                        }`}>
+                          {qualityScores[target.id]}%
+                        </span>
+                      )}
                       <span className="text-[10px] text-success uppercase font-semibold">
                         {target.status === "researched" ? "Done" : target.status.replace("_", " ")}
                       </span>
@@ -443,9 +455,11 @@ export function ResearchPanel({ collapsed, onExpand, refreshKey, onDataChange }:
                     <DossierView
                       targetId={target.id}
                       dossier={dossiers[target.id]}
-                      onLoadDossier={(d) =>
-                        setDossiers((prev) => ({ ...prev, [target.id]: d }))
-                      }
+                      quality={qualityScores[target.id]}
+                      onLoadDossier={(d, q) => {
+                        setDossiers((prev) => ({ ...prev, [target.id]: d }));
+                        if (typeof q === "number") setQualityScores((prev) => ({ ...prev, [target.id]: q }));
+                      }}
                     />
                   )}
                 </div>
@@ -586,10 +600,12 @@ function DossierView({
   targetId,
   dossier,
   onLoadDossier,
+  quality,
 }: {
   targetId: string;
   dossier?: Dossier;
-  onLoadDossier: (d: Dossier) => void;
+  onLoadDossier: (d: Dossier, quality?: number) => void;
+  quality?: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -629,7 +645,7 @@ function DossierView({
               ? fieldMap.sources.split("\n").filter(Boolean)
               : [],
             contactPaths: data.contactPaths || [],
-          });
+          }, data.quality);
         } else {
           setLoadError("No research data yet. Click the refresh button to research this target.");
         }
