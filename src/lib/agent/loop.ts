@@ -394,11 +394,15 @@ ${learningStr}
 AVAILABLE TOOLS:
 ${tools.map((t) => `- ${t.name}: ${t.description}`).join("\n")}
 
-RULES:
-- If the goal is achieved or no more useful steps exist, set action to "complete"
-- Use workingNotes to record observations or intermediate conclusions for future steps
-- If you discovered targets but haven't added them yet, use discover_and_add or create targets
-- Process targets from the targetQueue when available
+CRITICAL RULES:
+- Do NOT complete if there are targets in the targetQueue that haven't been researched/scored/drafted
+- Do NOT complete if the goal mentions "research" or "outreach" but no targets have been researched or drafted yet
+- After discover_and_add: use research_batch on the discovered target IDs
+- After research_batch: use process_pipeline to score and draft outreach for the researched targets
+- Only set action to "complete" when the FULL goal is achieved (discovery + research + outreach if the goal asked for all of those)
+- Use workingNotes to track what you've done and what's left
+- If you discovered targets but they haven't been researched yet, call research_batch with their IDs
+- If targets are researched but not scored/drafted, call process_pipeline
 
 Respond with JSON only:
 {

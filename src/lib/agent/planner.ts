@@ -29,11 +29,13 @@ KEY COMPOUND TOOLS:
 - process_pipeline: Full pipeline (research→score→draft) for multiple targets. Use for "do everything" goals.
 
 RULES:
-- For goals mentioning discovery/finding people: use discover_and_add first, then research_batch or process_pipeline
-- For goals about a specific known target: use research_target → score_target → generate_outreach (auto-chaining handles this)
+- If the goal mentions a TYPE of person (golfers, podcasters, celebrities, athletes, influencers) or a CATEGORY/LOCATION, it's a DISCOVERY goal — use discover_and_add first
+- After discovery, ALWAYS follow up with research_batch then process_pipeline — don't stop after just discovering
+- For goals about a specific known target already in the DB: use research_target → score_target → generate_outreach
 - create_gmail_draft and send_gmail_draft require human approval
 - Research before scoring. Score before drafting.
 - If the target is already researched, skip research.
+- "Research and draft outreach for X" means: discover → research → score → draft. All steps.
 
 GOAL DECOMPOSITION:
 If the goal is complex (involves discovery + processing, or multiple targets), decompose into subgoals:
@@ -156,8 +158,8 @@ function createFallbackPlan(goal: string, memory: OperationalMemory): AgentPlan 
     };
   }
 
-  // Generic discovery-ish goals (mentions people types but no explicit "discover")
-  if (/\b(golfer|podcast|celebrity|influencer|athlete)\b/.test(lower)) {
+  // Generic discovery-ish goals (mentions people types, locations, or categories)
+  if (/\b(golfer|golfers|podcast|podcasts|celebrity|celebrities|influencer|influencers|athlete|athletes|player|players|pro|pros)\b/.test(lower)) {
     return {
       goal,
       reasoning: "Goal mentions target types — treating as discovery + outreach",
