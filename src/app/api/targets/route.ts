@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import {
   isDbConfigured,
   getTargets,
+  getTarget,
   createTarget,
   updateTarget,
   deleteTarget,
   type Target,
 } from "@/lib/db";
+import { signalUserOverride } from "@/lib/agent/signals";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +57,19 @@ export async function PATCH(request: Request) {
   }
 
   try {
+    const before = await getTarget(id);
     const data = await updateTarget(id, updates);
+
+    // Emit learning signals for manual overrides
+    if (before) {
+      for (const [field, newVal] of Object.entries(updates)) {
+        const oldVal = (before as unknown as Record<string, unknown>)[field];
+        if (String(oldVal) !== String(newVal)) {
+          signalUserOverride({ targetId: id, field, oldValue: String(oldVal ?? ""), newValue: String(newVal) }).catch(() => {});
+        }
+      }
+    }
+
     return NextResponse.json(data);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

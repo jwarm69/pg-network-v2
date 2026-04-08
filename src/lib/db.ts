@@ -23,6 +23,8 @@ export function isDbConfigured(): boolean {
   return !!process.env.TURSO_DATABASE_URL;
 }
 
+export { ensureSchema, getClient };
+
 async function ensureSchema(): Promise<void> {
   if (_schemaInitialized) return;
   const db = getClient();
@@ -118,6 +120,127 @@ async function ensureSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id);
     CREATE INDEX IF NOT EXISTS idx_activity_log_target_id ON activity_log(target_id);
     CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at);
+
+    -- ─── Agent Harness Tables ───
+
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id             TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      goal           TEXT NOT NULL,
+      target_id      TEXT REFERENCES targets(id) ON DELETE SET NULL,
+      status         TEXT NOT NULL DEFAULT 'pending',
+      trigger        TEXT NOT NULL DEFAULT 'manual',
+      parent_run_id  TEXT REFERENCES agent_runs(id),
+      plan_json      TEXT,
+      context_json   TEXT,
+      result_json    TEXT,
+      error          TEXT,
+      tokens_used    INTEGER NOT NULL DEFAULT 0,
+      cost_cents     INTEGER NOT NULL DEFAULT 0,
+      started_at     TEXT,
+      completed_at   TEXT,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_steps (
+      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      run_id      TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      step_index  INTEGER NOT NULL,
+      type        TEXT NOT NULL,
+      input_json  TEXT,
+      output_json TEXT,
+      reasoning   TEXT,
+      duration_ms INTEGER,
+      tokens_used INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS tool_calls (
+      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      step_id     TEXT REFERENCES agent_steps(id) ON DELETE CASCADE,
+      run_id      TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      tool_name   TEXT NOT NULL,
+      input_json  TEXT NOT NULL,
+      output_json TEXT,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      error       TEXT,
+      duration_ms INTEGER,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS approval_gates (
+      id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      run_id          TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      step_id         TEXT REFERENCES agent_steps(id),
+      gate_type       TEXT NOT NULL,
+      payload_json    TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      user_edits_json TEXT,
+      decided_at      TEXT,
+      expires_at      TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_signals (
+      id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      target_id    TEXT REFERENCES targets(id) ON DELETE SET NULL,
+      run_id       TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+      thread_id    TEXT REFERENCES outreach_threads(id) ON DELETE SET NULL,
+      message_id   TEXT REFERENCES messages(id) ON DELETE SET NULL,
+      signal_type  TEXT NOT NULL,
+      signal_value TEXT NOT NULL,
+      context_json TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS experiments (
+      id             TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      name           TEXT NOT NULL,
+      hypothesis     TEXT NOT NULL,
+      variable       TEXT NOT NULL,
+      variants_json  TEXT NOT NULL,
+      status         TEXT NOT NULL DEFAULT 'active',
+      metric         TEXT NOT NULL,
+      results_json   TEXT,
+      min_samples    INTEGER NOT NULL DEFAULT 10,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      concluded_at   TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS experiment_assignments (
+      id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      experiment_id   TEXT NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+      variant_id      TEXT NOT NULL,
+      run_id          TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+      thread_id       TEXT REFERENCES outreach_threads(id) ON DELETE SET NULL,
+      target_id       TEXT REFERENCES targets(id) ON DELETE SET NULL,
+      outcome_json    TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS learned_preferences (
+      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      category    TEXT NOT NULL,
+      key         TEXT NOT NULL,
+      value_json  TEXT NOT NULL,
+      confidence  REAL NOT NULL DEFAULT 0.5,
+      sample_size INTEGER NOT NULL DEFAULT 0,
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(category, key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_target_id ON agent_runs(target_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_created_at ON agent_runs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_agent_steps_run_id ON agent_steps(run_id);
+    CREATE INDEX IF NOT EXISTS idx_tool_calls_run_id ON tool_calls(run_id);
+    CREATE INDEX IF NOT EXISTS idx_tool_calls_tool_name ON tool_calls(tool_name);
+    CREATE INDEX IF NOT EXISTS idx_approval_gates_status ON approval_gates(status);
+    CREATE INDEX IF NOT EXISTS idx_approval_gates_run_id ON approval_gates(run_id);
+    CREATE INDEX IF NOT EXISTS idx_learning_signals_type ON learning_signals(signal_type);
+    CREATE INDEX IF NOT EXISTS idx_learning_signals_target_id ON learning_signals(target_id);
+    CREATE INDEX IF NOT EXISTS idx_learning_signals_created_at ON learning_signals(created_at);
+    CREATE INDEX IF NOT EXISTS idx_experiments_status ON experiments(status);
+    CREATE INDEX IF NOT EXISTS idx_exp_assignments_experiment ON experiment_assignments(experiment_id);
   `);
 
   _schemaInitialized = true;

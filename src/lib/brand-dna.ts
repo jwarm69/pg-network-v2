@@ -154,3 +154,14 @@ PROGRESSIVE CONCISION (follow-ups get SHORTER, not longer):
 SAFETY:
 ${SAFETY_RULES.map((r) => `- ${r}`).join("\n")}`;
 }
+
+export async function buildBrandDnaPromptWithLearning(): Promise<string> {
+  const base = buildBrandDnaPrompt();
+  try {
+    const { buildLearningContext } = await import("./agent/memory");
+    const learning = await buildLearningContext();
+    return learning ? `${base}\n${learning}` : base;
+  } catch {
+    return base;
+  }
+}

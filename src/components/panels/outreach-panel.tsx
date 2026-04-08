@@ -18,6 +18,7 @@ import {
   User,
 } from "lucide-react";
 import { TargetThread } from "@/components/target-thread";
+import { PendingApprovals } from "@/components/pending-approvals";
 import type {
   Lane,
   OutreachThread,
@@ -381,6 +382,9 @@ export function OutreachPanel({ collapsed, onExpand, refreshKey, onDataChange }:
           <span className="text-muted">— drafts push to inbox</span>
         </div>
       )}
+
+      {/* ─── Pending Agent Approvals ─── */}
+      <PendingApprovals refreshKey={refreshKey} onApproval={() => { fetchThreads(); onDataChange?.(); }} />
 
       {/* ─── Generate Outreach Section ─── */}
       {showGenerator && (

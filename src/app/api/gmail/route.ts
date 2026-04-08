@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isDbConfigured, getMessageById, updateThread } from "@/lib/db";
+import { signalMessageSent } from "@/lib/agent/signals";
 import {
   isGoogleConfigured,
   isGmailConnected,
@@ -129,6 +130,13 @@ async function handleSendDraft(body: Record<string, unknown>) {
 
   try {
     const result = await sendGmailDraft(draftId);
+
+    // Emit learning signal for message sent
+    const threadId = body.threadId as string | undefined;
+    if (threadId) {
+      signalMessageSent({ targetId: "", threadId, messageId: result.messageId, channel: "email" }).catch(() => {});
+    }
+
     return NextResponse.json({ success: true, messageId: result.messageId });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";

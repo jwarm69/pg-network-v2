@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/check-replies",
-      "schedule": "0 9 * * *"
+      "path": "/api/cron/agent-tick",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
