@@ -5,12 +5,16 @@ import { ResearchPanel } from "@/components/panels/research-panel";
 import { OutreachPanel } from "@/components/panels/outreach-panel";
 import { DatabasePanel } from "@/components/panels/database-panel";
 import { CommandBar, type CommandBarHandle } from "@/components/command-bar";
+import { AgentView } from "@/components/agent-view";
+import { Bot, LayoutGrid } from "lucide-react";
 
 type Panel = "research" | "outreach" | "database";
+type ViewMode = "crm" | "agent";
 
 const PANEL_ORDER: Panel[] = ["research", "outreach", "database"];
 
 export default function Dashboard() {
+  const [viewMode, setViewMode] = useState<ViewMode>("crm");
   const [activePanel, setActivePanel] = useState<Panel>("outreach");
   const [expandedPanel, setExpandedPanel] = useState<Panel | null>(null);
   const commandBarRef = useRef<CommandBarHandle>(null);
@@ -69,75 +73,94 @@ export default function Dashboard() {
             Networking Intelligence
           </p>
         </div>
-        <StatusLine />
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setViewMode(viewMode === "crm" ? "agent" : "crm")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              viewMode === "agent"
+                ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                : "text-muted hover:text-secondary hover:bg-card"
+            }`}
+          >
+            {viewMode === "agent" ? <Bot size={13} /> : <Bot size={13} />}
+            {viewMode === "agent" ? "Agent" : "Agent"}
+          </button>
+          <StatusLine />
+        </div>
       </header>
 
-      {/* Mobile tab bar */}
-      <MobileTabBar activePanel={activePanel} onSwitch={setActivePanel} />
+      {viewMode === "crm" ? (
+        <>
+          {/* Mobile tab bar */}
+          <MobileTabBar activePanel={activePanel} onSwitch={setActivePanel} />
 
-      {/* 3-panel layout */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* Desktop: 3 columns */}
-        <div className="hidden md:flex flex-1 overflow-hidden">
-          <div
-            className={`border-r border-border overflow-y-auto transition-all duration-300 ${
-              expandedPanel === "research"
-                ? "flex-[3]"
-                : expandedPanel
-                  ? "flex-[0.5] min-w-[60px]"
-                  : "flex-1"
-            }`}
-          >
-            <ResearchPanel
-              collapsed={expandedPanel !== null && expandedPanel !== "research"}
-              onExpand={() => handlePanelClick("research")}
-              refreshKey={refreshKey}
-              onDataChange={triggerRefresh}
-            />
-          </div>
-          <div
-            className={`border-r border-border overflow-y-auto transition-all duration-300 ${
-              expandedPanel === "outreach"
-                ? "flex-[3]"
-                : expandedPanel
-                  ? "flex-[0.5] min-w-[60px]"
-                  : "flex-[1.5]"
-            }`}
-          >
-            <OutreachPanel
-              collapsed={expandedPanel !== null && expandedPanel !== "outreach"}
-              onExpand={() => handlePanelClick("outreach")}
-              refreshKey={refreshKey}
-              onDataChange={triggerRefresh}
-            />
-          </div>
-          <div
-            className={`overflow-y-auto transition-all duration-300 ${
-              expandedPanel === "database"
-                ? "flex-[3]"
-                : expandedPanel
-                  ? "flex-[0.5] min-w-[60px]"
-                  : "flex-1"
-            }`}
-          >
-            <DatabasePanel
-              collapsed={expandedPanel !== null && expandedPanel !== "database"}
-              onExpand={() => handlePanelClick("database")}
-              refreshKey={refreshKey}
-              onDataChange={triggerRefresh}
-            />
-          </div>
-        </div>
+          {/* 3-panel layout */}
+          <main className="flex-1 flex overflow-hidden">
+            {/* Desktop: 3 columns */}
+            <div className="hidden md:flex flex-1 overflow-hidden">
+              <div
+                className={`border-r border-border overflow-y-auto transition-all duration-300 ${
+                  expandedPanel === "research"
+                    ? "flex-[3]"
+                    : expandedPanel
+                      ? "flex-[0.5] min-w-[60px]"
+                      : "flex-1"
+                }`}
+              >
+                <ResearchPanel
+                  collapsed={expandedPanel !== null && expandedPanel !== "research"}
+                  onExpand={() => handlePanelClick("research")}
+                  refreshKey={refreshKey}
+                  onDataChange={triggerRefresh}
+                />
+              </div>
+              <div
+                className={`border-r border-border overflow-y-auto transition-all duration-300 ${
+                  expandedPanel === "outreach"
+                    ? "flex-[3]"
+                    : expandedPanel
+                      ? "flex-[0.5] min-w-[60px]"
+                      : "flex-[1.5]"
+                }`}
+              >
+                <OutreachPanel
+                  collapsed={expandedPanel !== null && expandedPanel !== "outreach"}
+                  onExpand={() => handlePanelClick("outreach")}
+                  refreshKey={refreshKey}
+                  onDataChange={triggerRefresh}
+                />
+              </div>
+              <div
+                className={`overflow-y-auto transition-all duration-300 ${
+                  expandedPanel === "database"
+                    ? "flex-[3]"
+                    : expandedPanel
+                      ? "flex-[0.5] min-w-[60px]"
+                      : "flex-1"
+                }`}
+              >
+                <DatabasePanel
+                  collapsed={expandedPanel !== null && expandedPanel !== "database"}
+                  onExpand={() => handlePanelClick("database")}
+                  refreshKey={refreshKey}
+                  onDataChange={triggerRefresh}
+                />
+              </div>
+            </div>
 
-        {/* Mobile: single active panel with swipe */}
-        <div
-          className="md:hidden flex-1 overflow-y-auto"
-        >
-          {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
-          {activePanel === "outreach" && <OutreachPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
-          {activePanel === "database" && <DatabasePanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
-        </div>
-      </main>
+            {/* Mobile: single active panel with swipe */}
+            <div className="md:hidden flex-1 overflow-y-auto">
+              {activePanel === "research" && <ResearchPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
+              {activePanel === "outreach" && <OutreachPanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
+              {activePanel === "database" && <DatabasePanel collapsed={false} onExpand={() => {}} refreshKey={refreshKey} onDataChange={triggerRefresh} />}
+            </div>
+          </main>
+        </>
+      ) : (
+        <main className="flex-1 overflow-hidden">
+          <AgentView refreshKey={refreshKey} onDataChange={triggerRefresh} />
+        </main>
+      )}
 
       {/* Command Bar -- always visible */}
       <CommandBar
