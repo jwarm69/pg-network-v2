@@ -12,7 +12,8 @@ import {
 import { askClaude } from "../../claude";
 import { buildBrandDnaPrompt, ANGLE_ARCHETYPES, PROGRESSIVE_CONCISION } from "../../brand-dna";
 import { validateMessage } from "../../validate";
-import type { ToolResult, ToolContext } from "../types";
+import { signalAngleSelected } from "../signals";
+import type { ToolResult, ToolContext, LearnedPreference } from "../types";
 
 interface OutreachInput {
   targetId: string;
@@ -63,22 +64,18 @@ registerTool<OutreachInput, OutreachOutput>({
     const fieldMap: Record<string, string> = {};
     for (const r of research) fieldMap[r.field] = r.value;
 
-    // Select angle
+    // Select angle — actively use learned preferences
     let angle = input.angle;
     if (!angle) {
-      // Use learned preferences if available
-      const anglePrefs = context.learnedPreferences.filter((p) => p.category === "angle_effectiveness");
-      if (anglePrefs.length > 0) {
-        const best = anglePrefs.sort((a, b) => {
-          const aData = JSON.parse(a.value_json);
-          const bData = JSON.parse(b.value_json);
-          return (bData.replyRate || 0) - (aData.replyRate || 0);
-        })[0];
-        angle = best.key;
-      } else {
-        angle = ANGLE_ARCHETYPES[0]?.name || "The Founder Parallel";
-      }
+      angle = selectBestAngle(context.learnedPreferences);
     }
+
+    // Emit learning signal so adaptation can track which angles get used
+    signalAngleSelected({
+      targetId: input.targetId,
+      runId: context.runId,
+      angle,
+    }).catch(() => {});
 
     const lanes = input.lanes || ["direct", "agent", "wildcard"] as Lane[];
     const allWarnings: string[] = [];
@@ -169,6 +166,39 @@ registerTool<OutreachInput, OutreachOutput>({
     };
   },
 });
+
+/**
+ * Select the best outreach angle using learned preferences.
+ * Prioritizes: high-confidence angles with best reply rate > approval rate > least rejected.
+ * Falls back to cycling through archetypes if no learning data yet.
+ */
+function selectBestAngle(preferences: LearnedPreference[]): string {
+  const anglePrefs = preferences.filter(
+    (p) => p.category === "angle_effectiveness" && p.confidence >= 0.4
+  );
+
+  if (anglePrefs.length > 0) {
+    // Score each angle: replyRate * 3 + approvalRate - rejectionRate * 2
+    // Weighted by confidence so we trust higher-sample angles more
+    const scored = anglePrefs.map((p) => {
+      const data = JSON.parse(p.value_json) as {
+        replyRate?: number;
+        approvalRate?: number;
+        rejectionRate?: number;
+      };
+      const score =
+        ((data.replyRate || 0) * 3 + (data.approvalRate || 0) - (data.rejectionRate || 0) * 2) *
+        p.confidence;
+      return { angle: p.key, score, sampleSize: p.sample_size };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0].angle;
+  }
+
+  // No learning data yet — pick from archetypes
+  return ANGLE_ARCHETYPES[0]?.name || "The Founder Parallel";
+}
 
 function buildLanePrompt(
   targetName: string,

@@ -65,6 +65,51 @@ export async function updateAgentRun(id: string, updates: Partial<AgentRun>): Pr
   });
 }
 
+/**
+ * Atomically claim a run for execution. Returns true if this caller won the lock.
+ * Uses an atomic UPDATE ... WHERE to prevent concurrent execution of the same run.
+ */
+export async function tryClaimRun(runId: string, expectedStatus: AgentRunStatus = "executing"): Promise<boolean> {
+  const client = await db();
+  const lockToken = crypto.randomUUID();
+  const result = await client.execute({
+    sql: `UPDATE agent_runs
+          SET context_json = json_set(COALESCE(context_json, '{}'), '$.lockToken', ?, '$.lockClaimedAt', ?)
+          WHERE id = ? AND status = ?
+            AND (
+              json_extract(context_json, '$.lockClaimedAt') IS NULL
+              OR datetime(json_extract(context_json, '$.lockClaimedAt'), '+60 seconds') < datetime('now')
+            )`,
+    args: [lockToken, new Date().toISOString(), runId, expectedStatus],
+  });
+  return result.rowsAffected > 0;
+}
+
+/**
+ * Release the execution lock on a run (clear the lock fields).
+ */
+export async function releaseLock(runId: string): Promise<void> {
+  const client = await db();
+  await client.execute({
+    sql: `UPDATE agent_runs
+          SET context_json = json_remove(json_remove(COALESCE(context_json, '{}'), '$.lockToken'), '$.lockClaimedAt')
+          WHERE id = ?`,
+    args: [runId],
+  });
+}
+
+/**
+ * Get the count of signals created after a given timestamp.
+ */
+export async function getSignalCountSince(since: string): Promise<number> {
+  const client = await db();
+  const result = await client.execute({
+    sql: "SELECT COUNT(*) as count FROM learning_signals WHERE created_at > ?",
+    args: [since],
+  });
+  return (result.rows[0] as unknown as { count: number }).count;
+}
+
 export async function getAgentRunsByStatus(status: AgentRunStatus): Promise<AgentRun[]> {
   const client = await db();
   const result = await client.execute({ sql: "SELECT * FROM agent_runs WHERE status = ? ORDER BY created_at DESC", args: [status] });

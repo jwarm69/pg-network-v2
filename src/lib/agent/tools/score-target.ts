@@ -77,10 +77,22 @@ Respond with JSON only: { "reach": N, "relevance": N, "reachability": N, "angleS
     for (const pref of scoringBias) {
       try {
         const bias = JSON.parse(pref.value_json) as { dimension: string; adjustment: number };
-        if (dimensions![bias.dimension] !== undefined) {
+        if (bias.dimension && dimensions![bias.dimension] !== undefined) {
+          // Per-dimension bias (e.g. "reach", "relevance")
           const old = dimensions![bias.dimension];
           dimensions![bias.dimension] = Math.max(0, Math.min(100, old + bias.adjustment));
           adjustments.push(`${bias.dimension}: ${old} -> ${dimensions![bias.dimension]} (learned bias)`);
+        } else if (pref.key === "overall_drift" && bias.adjustment) {
+          // Overall drift: distribute across all dimensions proportionally
+          const dimKeys = Object.keys(dimensions!);
+          const perDim = Math.round(bias.adjustment / dimKeys.length);
+          if (Math.abs(perDim) >= 1) {
+            for (const key of dimKeys) {
+              const old = dimensions![key];
+              dimensions![key] = Math.max(0, Math.min(100, old + perDim));
+            }
+            adjustments.push(`overall drift: ${bias.adjustment > 0 ? "+" : ""}${bias.adjustment} distributed across ${dimKeys.length} dimensions`);
+          }
         }
       } catch { /* skip invalid */ }
     }

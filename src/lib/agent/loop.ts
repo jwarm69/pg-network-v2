@@ -4,12 +4,13 @@ import {
   getAgentRun,
   updateAgentRun,
   createAgentStep,
-  getStepsForRun,
   getMaxStepIndex,
   createToolCall,
   updateToolCall,
   createApprovalGate,
   getAllLearnedPreferences,
+  tryClaimRun,
+  releaseLock,
 } from "../db-agent";
 import { buildOperationalMemory, serializeMemoryForPrompt, buildLearningContext, serializeScratchpad, createEmptyScratchpad } from "./memory";
 import { createAgentPlan } from "./planner";
@@ -28,6 +29,13 @@ import type {
 } from "./types";
 
 const TIME_BUDGET_MS = 50_000;
+
+// Rough cost estimate per 1K tokens (input+output blended) for Claude Sonnet
+const COST_PER_1K_TOKENS_CENTS = 0.6;
+
+function estimateCostCents(tokens: number): number {
+  return Math.round((tokens / 1000) * COST_PER_1K_TOKENS_CENTS * 100) / 100;
+}
 
 // ─── Start a new agent run ───
 
@@ -76,15 +84,26 @@ async function runLoop(
   runId: string,
   startTime: number
 ): Promise<{ runId: string; status: string; gateId?: string }> {
-  while (true) {
-    if (Date.now() - startTime > TIME_BUDGET_MS) {
-      return { runId, status: "executing" };
-    }
+  // Acquire execution lock to prevent concurrent step execution
+  const claimed = await tryClaimRun(runId);
+  if (!claimed) {
+    // Another process is already executing this run
+    return { runId, status: "executing" };
+  }
 
-    const result = await executeOneStep(runId);
-    if (result.status !== "executing") {
-      return result;
+  try {
+    while (true) {
+      if (Date.now() - startTime > TIME_BUDGET_MS) {
+        return { runId, status: "executing" };
+      }
+
+      const result = await executeOneStep(runId);
+      if (result.status !== "executing") {
+        return result;
+      }
     }
+  } finally {
+    await releaseLock(runId).catch(() => {});
   }
 }
 
@@ -140,19 +159,25 @@ async function executeOneStep(runId: string): Promise<{ runId: string; status: s
     return completeRun(run, `Stopped by manager: ${checkIn.adjustment}`);
   }
 
-  // ─── AUTO-CHAIN: check if last tool provided a hint ───
+  // ─── AUTO-CHAIN: check if last tool provided a valid hint ───
   let decision: AgentDecision;
 
   if (scratchpad.lastToolResult && typeof scratchpad.lastToolResult === "object") {
     const lastResult = scratchpad.lastToolResult as { nextStepHint?: string; nextStepInput?: Record<string, unknown> };
+    const hintedTool = lastResult.nextStepHint ? getTool(lastResult.nextStepHint) : undefined;
 
-    if (lastResult.nextStepHint && getTool(lastResult.nextStepHint)) {
+    if (lastResult.nextStepHint && !hintedTool) {
+      // Log invalid hint so we can catch stale references after tool renames
+      console.warn(`[agent] Invalid nextStepHint "${lastResult.nextStepHint}" — tool not found in registry, falling back to think()`);
+    }
+
+    if (hintedTool) {
       // Auto-chain: skip think(), use the hint directly
       const hintInput = lastResult.nextStepInput || { targetId: ctx.targetId || run.target_id };
 
       decision = {
         action: "tool_call",
-        toolName: lastResult.nextStepHint,
+        toolName: lastResult.nextStepHint!,
         input: hintInput,
         reasoning: `Auto-chained from previous tool hint: ${lastResult.nextStepHint}`,
       };
@@ -175,7 +200,6 @@ async function executeOneStep(runId: string): Promise<{ runId: string; status: s
       });
     }
   } else {
-    const steps = await getStepsForRun(runId);
     decision = await thinkWithScratchpad(run, plan, memory, preferences, scratchpad);
     await createAgentStep({
       runId,
@@ -313,9 +337,12 @@ async function executeOneStep(runId: string): Promise<{ runId: string; status: s
 
   await saveScratchpad(runId, run, scratchpad);
 
-  // Update token count
+  // Update token count and cost estimate
+  const stepTokens = result.metadata?.tokensUsed || 0;
+  const newTotalTokens = run.tokens_used + stepTokens;
   await updateAgentRun(runId, {
-    tokens_used: run.tokens_used + (result.metadata?.tokensUsed || 0),
+    tokens_used: newTotalTokens,
+    cost_cents: estimateCostCents(newTotalTokens),
   });
 
   return { runId, status: "executing" };

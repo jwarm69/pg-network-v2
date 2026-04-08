@@ -7,7 +7,7 @@ import {
 } from "@/lib/db";
 import { checkForReplies } from "@/lib/google-auth";
 import { isGmailConnected } from "@/lib/google-auth";
-import { getAgentRunsByStatus, getSignalCount } from "@/lib/db-agent";
+import { getAgentRunsByStatus, getSignalCountSince } from "@/lib/db-agent";
 import { executeNextStep, triggerContinuation } from "@/lib/agent/loop";
 import { checkExpiredGates } from "@/lib/agent/gates";
 import { signalReplyReceived } from "@/lib/agent/signals";
@@ -111,16 +111,16 @@ export async function GET(request: Request) {
     results.expiredGates = { error: err instanceof Error ? err.message : "Unknown" };
   }
 
-  // 4. Run adaptation if enough new signals
+  // 4. Run adaptation only if there are new signals since last run
   try {
-    const signalCount = await getSignalCount();
-    // Simple threshold: run adaptation every time signals exist
-    // In production, track last adaptation run and only run if 5+ new signals
-    if (signalCount > 0) {
+    // Only re-run adaptation if 5+ signals arrived in the last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const newSignalCount = await getSignalCountSince(oneHourAgo);
+    if (newSignalCount >= 5) {
       await runAdaptation();
-      results.adaptation = { ran: true, signalCount };
+      results.adaptation = { ran: true, newSignalCount };
     } else {
-      results.adaptation = { ran: false, signalCount };
+      results.adaptation = { ran: false, newSignalCount, reason: "fewer than 5 new signals in the last hour" };
     }
   } catch (err) {
     results.adaptation = { error: err instanceof Error ? err.message : "Unknown" };
