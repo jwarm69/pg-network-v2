@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { executeAgentRun } from "@/lib/agent/loop";
+import { executeAgentRun, triggerContinuation } from "@/lib/agent/loop";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,6 +15,11 @@ export async function POST(request: Request) {
 
     // The loop runs in-process within the 60s Vercel time budget
     const result = await executeAgentRun({ goal, targetId, trigger });
+
+    // If still executing after time budget, ensure continuation is scheduled
+    if (result.status === "executing") {
+      triggerContinuation(result.runId).catch(() => {});
+    }
 
     return NextResponse.json(result);
   } catch (err) {

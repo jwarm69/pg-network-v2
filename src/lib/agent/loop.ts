@@ -68,7 +68,14 @@ export async function executeAgentRun(params: {
     reasoning: plan.reasoning,
   });
 
-  return runLoop(run.id, startTime);
+  const result = await runLoop(run.id, startTime);
+
+  // If the time budget ran out but the run isn't done, schedule continuation
+  if (result.status === "executing") {
+    triggerContinuation(run.id).catch(() => {});
+  }
+
+  return result;
 }
 
 // ─── In-process loop with time budget ───
