@@ -57,7 +57,10 @@ Respond with JSON array only.`;
     });
 
     try {
-      const results = JSON.parse(extracted);
+      let cleaned = extracted.trim();
+      const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) cleaned = fenceMatch[1].trim();
+      const results = JSON.parse(cleaned);
       return { success: true, data: { results: Array.isArray(results) ? results : [], rawSearch } };
     } catch {
       return { success: true, data: { results: [], rawSearch } };

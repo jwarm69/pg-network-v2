@@ -19,6 +19,7 @@ import {
 } from "../../search-providers";
 import { askClaude } from "../../claude";
 import type { ToolResult } from "../types";
+import { parseClaudeJson } from "../utils";
 
 interface ResearchInput {
   targetId: string;
@@ -128,7 +129,7 @@ If a field is unknown, use "UNKNOWN -- [describe what's missing]".`;
 
     let dossier: Record<string, unknown>;
     try {
-      dossier = JSON.parse(synthesized);
+      dossier = parseClaudeJson(synthesized);
     } catch {
       return { success: false, error: "Failed to parse research synthesis" };
     }

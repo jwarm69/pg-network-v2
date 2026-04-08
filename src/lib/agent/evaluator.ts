@@ -3,6 +3,7 @@ import { getAgentRun, getStepsForRun, getToolCallsForRun, updateAgentRun } from 
 import { getTarget, getResearch, getThreads, getMessages } from "../db";
 import { buildBrandDnaPrompt } from "../brand-dna";
 import type { AgentRun, AgentStep, ToolCall, RunScratchpad } from "./types";
+import { parseClaudeJson } from "./utils";
 
 // ─── Run Quality Evaluation ───
 
@@ -81,19 +82,19 @@ Respond with JSON only.`;
   });
 
   try {
-    const evaluation = JSON.parse(result);
+    const ev = parseClaudeJson<RunEvaluation>(result);
     const overall = Math.round(
-      (evaluation.dataQuality + evaluation.decisionQuality + evaluation.completeness) / 3
+      ((ev.dataQuality || 0) + (ev.decisionQuality || 0) + (ev.completeness || 0)) / 3
     );
     return {
       overallScore: overall,
-      goalAchieved: evaluation.goalAchieved ?? false,
-      dataQuality: evaluation.dataQuality ?? 0,
-      decisionQuality: evaluation.decisionQuality ?? 0,
-      completeness: evaluation.completeness ?? 0,
-      issues: evaluation.issues || [],
-      suggestions: evaluation.suggestions || [],
-      summary: evaluation.summary || "No evaluation summary",
+      goalAchieved: ev.goalAchieved ?? false,
+      dataQuality: ev.dataQuality ?? 0,
+      decisionQuality: ev.decisionQuality ?? 0,
+      completeness: ev.completeness ?? 0,
+      issues: ev.issues || [],
+      suggestions: ev.suggestions || [],
+      summary: ev.summary || "No evaluation summary",
     };
   } catch {
     return {
@@ -174,7 +175,7 @@ JSON only.`;
       maxTokens: 200,
       temperature: 0,
     });
-    return JSON.parse(result);
+    return parseClaudeJson(result);
   } catch {
     // Default to completing if Claude fails — we've already done hard checks
     return { shouldComplete: true, reason: "Critique check passed (fallback)" };

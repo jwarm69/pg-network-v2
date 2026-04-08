@@ -19,6 +19,7 @@ import {
 } from "../../search-providers";
 import { askClaude } from "../../claude";
 import type { ToolResult } from "../types";
+import { parseClaudeJson } from "../utils";
 
 interface ResearchBatchInput {
   targetIds: string[];
@@ -84,7 +85,7 @@ Data:\n${combinedText.slice(0, 8000)}\nEmails: ${emails.join(", ")}\nSocials: ${
     );
 
     let dossier: Record<string, unknown>;
-    try { dossier = JSON.parse(synthesis); } catch { dossier = { bio: "Research synthesis failed" }; }
+    try { dossier = parseClaudeJson(synthesis); } catch { dossier = { bio: "Research synthesis failed" }; }
 
     // Extract and save contact paths
     const contactPaths = ((dossier.contactPaths || []) as Array<Record<string, string>>).map((p) => ({

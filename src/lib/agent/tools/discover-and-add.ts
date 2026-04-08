@@ -66,7 +66,11 @@ Respond with JSON array only.`;
 
     let parsed: Array<{ name: string; description: string; type?: string }>;
     try {
-      parsed = JSON.parse(extracted);
+      // Strip markdown code fences if present
+      let cleaned = extracted.trim();
+      const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) cleaned = fenceMatch[1].trim();
+      parsed = JSON.parse(cleaned);
       if (!Array.isArray(parsed)) parsed = [];
     } catch {
       return { success: true, data: { addedTargets: [], rawSearch } };

@@ -15,6 +15,7 @@ import { buildOperationalMemory, serializeMemoryForPrompt, buildLearningContext,
 import { createAgentPlan } from "./planner";
 import { executeTool, getTool, getToolsForPrompt, ensureToolsRegistered } from "./tools";
 import { emitSignal } from "./signals";
+import { parseClaudeJson } from "./utils";
 import { resolveGate } from "./gates";
 import { selfCritique, evaluateRun, midRunCheckIn } from "./evaluator";
 import type {
@@ -451,7 +452,7 @@ Respond with JSON only:
   });
 
   try {
-    return JSON.parse(result);
+    return parseClaudeJson(result);
   } catch {
     return { action: "complete", reasoning: "Failed to parse decision", outcome: "Agent stopped due to decision parse error" };
   }

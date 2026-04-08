@@ -3,6 +3,7 @@ import { getTarget, updateTarget, getResearch, logActivity } from "../../db";
 import { calculateScore, type ScoreResult } from "../../scoring";
 import { askClaude } from "../../claude";
 import type { ToolResult, ToolContext } from "../types";
+import { parseClaudeJson } from "../utils";
 
 interface ScoreInput {
   targetId: string;
@@ -65,7 +66,7 @@ Respond with JSON only: { "reach": N, "relevance": N, "reachability": N, "angleS
       });
 
       try {
-        dimensions = JSON.parse(result);
+        dimensions = parseClaudeJson(result);
       } catch {
         dimensions = { reach: 50, relevance: 50, reachability: 50, angleStrength: 50, timing: 50, meetingLikelihood: 50 };
       }

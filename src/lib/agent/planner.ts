@@ -1,7 +1,8 @@
 import { askClaude } from "../claude";
 import { getToolsForPrompt, ensureToolsRegistered } from "./tools";
 import { serializeMemoryForPrompt, buildLearningContext } from "./memory";
-import type { AgentPlan, OperationalMemory, SubGoal } from "./types";
+import type { AgentPlan, OperationalMemory, SubGoal, PlannedStep } from "./types";
+import { parseClaudeJson } from "./utils";
 
 export async function createAgentPlan(
   goal: string,
@@ -62,7 +63,7 @@ Respond with JSON only.`;
   });
 
   try {
-    const plan = JSON.parse(result);
+    const plan = parseClaudeJson<{ reasoning?: string; steps?: PlannedStep[]; maxSteps?: number; subgoals?: SubGoal[] }>(result);
     return {
       goal,
       reasoning: plan.reasoning || "",
