@@ -6,6 +6,7 @@ import {
   insertResearchRows,
   deleteContactPaths,
   insertContactPaths,
+  logActivity,
   type ContactPath,
 } from "../../db";
 import {
@@ -74,7 +75,8 @@ async function researchOneTarget(targetId: string): Promise<ResearchBatchResult>
   "bestApproach": "Recommended outreach strategy",
   "contactIntel": "Contact paths",
   "recentActivity": "Recent activity",
-  "partnershipAngle": "Why PG + them fits"
+  "partnershipAngle": "Why PG + them fits",
+  "contactPaths": [{"type":"direct|agent|wildcard","name":"...","role":"...","email":"...","channel":"email|dm","confidence":"high|medium|low"}]
 }
 
 Data:\n${combinedText.slice(0, 8000)}\nEmails: ${emails.join(", ")}\nSocials: ${JSON.stringify(socials)}`,
@@ -84,14 +86,32 @@ Data:\n${combinedText.slice(0, 8000)}\nEmails: ${emails.join(", ")}\nSocials: ${
     let dossier: Record<string, unknown>;
     try { dossier = JSON.parse(synthesis); } catch { dossier = { bio: "Research synthesis failed" }; }
 
-    const fieldEntries = Object.entries(dossier).map(([field, value]) => ({
-      field,
-      value: typeof value === "string" ? value : JSON.stringify(value),
+    // Extract and save contact paths
+    const contactPaths = ((dossier.contactPaths || []) as Array<Record<string, string>>).map((p) => ({
+      type: p.type || "direct",
+      name: p.name || "",
+      role: p.role || "",
+      email: p.email || null,
+      channel: p.channel || "email",
+      confidence: (p.confidence || "medium") as "high" | "medium" | "low",
+      source_url: null,
     }));
+
+    const fieldEntries = Object.entries(dossier)
+      .filter(([k]) => k !== "contactPaths")
+      .map(([field, value]) => ({
+        field,
+        value: typeof value === "string" ? value : JSON.stringify(value),
+      }));
 
     await deleteResearch(targetId);
     await insertResearchRows(targetId, fieldEntries);
+    await deleteContactPaths(targetId);
+    if (contactPaths.length > 0) {
+      await insertContactPaths(targetId, contactPaths);
+    }
     await updateTarget(targetId, { status: "researched" });
+    logActivity({ target_id: targetId, action: "research_completed", details: `Batch research completed for ${target.name}` }).catch(() => {});
 
     const fieldMap: Record<string, string> = {};
     for (const f of fieldEntries) fieldMap[f.field] = f.value;

@@ -20,8 +20,19 @@ interface AgentRun {
   status: string;
   trigger: string;
   tokens_used: number;
+  result_json: string | null;
   created_at: string;
   completed_at: string | null;
+}
+
+interface RunEvaluation {
+  overallScore: number;
+  goalAchieved: boolean;
+  dataQuality: number;
+  decisionQuality: number;
+  completeness: number;
+  issues: string[];
+  summary: string;
 }
 
 interface AgentStep {
@@ -202,6 +213,37 @@ export function AgentRuns({ className }: Props) {
                         ))}
                       </div>
                     )}
+                    {/* Evaluation display */}
+                    {run.result_json && (() => {
+                      try {
+                        const result = JSON.parse(run.result_json);
+                        const eval_ = result.evaluation as RunEvaluation | undefined;
+                        if (!eval_) return null;
+                        return (
+                          <div className="py-1.5 border-t border-border/30 space-y-1">
+                            <div className="flex items-center gap-2 text-[10px]">
+                              <span className="font-semibold text-secondary">Evaluation:</span>
+                              <span className={`font-bold ${eval_.overallScore >= 70 ? "text-success" : eval_.overallScore >= 40 ? "text-warning" : "text-error"}`}>
+                                {eval_.overallScore}/100
+                              </span>
+                              <span className={eval_.goalAchieved ? "text-success" : "text-error"}>
+                                {eval_.goalAchieved ? "Goal achieved" : "Goal not achieved"}
+                              </span>
+                            </div>
+                            <div className="flex gap-3 text-[9px] text-muted">
+                              <span>Data: {eval_.dataQuality}</span>
+                              <span>Decisions: {eval_.decisionQuality}</span>
+                              <span>Completeness: {eval_.completeness}</span>
+                            </div>
+                            {eval_.issues && eval_.issues.length > 0 && (
+                              <div className="text-[9px] text-error/80">
+                                Issues: {eval_.issues.join("; ")}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      } catch { return null; }
+                    })()}
                     <div className="flex items-center gap-3 text-[10px] text-muted pt-1 border-t border-border/30">
                       <span>Status: {run.status}</span>
                       <span>Tokens: {run.tokens_used}</span>

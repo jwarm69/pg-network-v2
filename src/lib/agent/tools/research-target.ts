@@ -6,6 +6,7 @@ import {
   insertResearchRows,
   deleteContactPaths,
   insertContactPaths,
+  logActivity,
   type ContactPath,
 } from "../../db";
 import {
@@ -210,6 +211,8 @@ If a field is unknown, use "UNKNOWN -- [describe what's missing]".`;
     const fieldMap: Record<string, string> = {};
     for (const f of fieldEntries) fieldMap[f.field] = f.value;
     const quality = scoreResearch(fieldMap, allCitations);
+
+    logActivity({ target_id: input.targetId, action: "research_completed", details: `Deep research completed for ${target.name} (quality: ${quality}, ${allCitations.length} sources)` }).catch(() => {});
 
     const dossierStrings: Record<string, string> = {};
     for (const [k, v] of Object.entries(dossier)) {

@@ -16,6 +16,7 @@ import { createAgentPlan } from "./planner";
 import { executeTool, getTool, getToolsForPrompt, ensureToolsRegistered } from "./tools";
 import { emitSignal } from "./signals";
 import { resolveGate } from "./gates";
+import { selfCritique, evaluateRun, midRunCheckIn } from "./evaluator";
 import type {
   AgentRun,
   AgentDecision,
@@ -125,6 +126,20 @@ async function executeOneStep(runId: string): Promise<{ runId: string; status: s
   const memory = await buildOperationalMemory(ctx.targetId || run.target_id || undefined);
   const preferences = await getAllLearnedPreferences();
 
+  // ─── MID-RUN CHECK-IN ───
+  const checkIn = await midRunCheckIn(run, scratchpad, currentStepIndex);
+  if (!checkIn.onTrack) {
+    await createAgentStep({
+      runId,
+      stepIndex: currentStepIndex,
+      type: "think",
+      reasoning: `[manager check-in] ${checkIn.adjustment}`,
+    });
+    scratchpad.workingNotes = `Manager check-in: ${checkIn.adjustment}`;
+    await saveScratchpad(runId, run, scratchpad);
+    return completeRun(run, `Stopped by manager: ${checkIn.adjustment}`);
+  }
+
   // ─── AUTO-CHAIN: check if last tool provided a hint ───
   let decision: AgentDecision;
 
@@ -176,8 +191,23 @@ async function executeOneStep(runId: string): Promise<{ runId: string; status: s
     scratchpad.workingNotes = decision.workingNotes;
   }
 
-  // Check if done
+  // Check if done — with self-critique
   if (decision.action === "complete") {
+    const critique = await selfCritique(run, scratchpad, decision.outcome || "");
+    if (!critique.shouldComplete) {
+      // Override: agent tried to complete but manager says no
+      await createAgentStep({
+        runId,
+        stepIndex: currentStepIndex + 1,
+        type: "think",
+        reasoning: `[manager override] Completion denied: ${critique.reason}. Continuing execution.`,
+      });
+      // Don't complete — let the loop continue with a fresh think()
+      scratchpad.workingNotes = `Manager override: ${critique.reason}. Need to continue.`;
+      scratchpad.lastToolResult = null; // Clear hint so we get a fresh think()
+      await saveScratchpad(runId, run, scratchpad);
+      return { runId, status: "executing" };
+    }
     await saveScratchpad(runId, run, scratchpad);
     return completeRun(run, decision.outcome);
   }
@@ -430,11 +460,25 @@ Respond with JSON only:
 // ─── Complete a run ───
 
 async function completeRun(run: AgentRun, outcome?: string): Promise<{ runId: string; status: string }> {
+  // Run post-completion evaluation (fire-and-forget to not block response)
+  const evaluationPromise = evaluateRun(run.id).then(async (evaluation) => {
+    await updateAgentRun(run.id, {
+      result_json: JSON.stringify({
+        outcome: outcome || "Run completed",
+        evaluation,
+      }),
+    });
+  }).catch(() => {});
+
   await updateAgentRun(run.id, {
     status: "completed",
     completed_at: new Date().toISOString(),
     result_json: JSON.stringify({ outcome: outcome || "Run completed" }),
   });
+
+  // Wait for evaluation but don't block for more than 10s
+  await Promise.race([evaluationPromise, new Promise((r) => setTimeout(r, 10000))]);
+
   return { runId: run.id, status: "completed" };
 }
 

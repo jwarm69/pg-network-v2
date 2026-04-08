@@ -243,6 +243,16 @@ async function ensureSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_exp_assignments_experiment ON experiment_assignments(experiment_id);
   `);
 
+  // ─── Migrations (safe to run repeatedly) ───
+  try {
+    await db.executeMultiple(`
+      ALTER TABLE targets ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';
+      ALTER TABLE targets ADD COLUMN created_by_run_id TEXT REFERENCES agent_runs(id);
+    `);
+  } catch {
+    // Columns already exist — safe to ignore
+  }
+
   _schemaInitialized = true;
 }
 
@@ -264,6 +274,8 @@ export type Lane = "direct" | "agent" | "wildcard";
 export type ThreadStatus = "draft" | "ready_for_review" | "approved" | "active" | "paused" | "completed";
 export type Sentiment = "interested" | "warm" | "redirect" | "neutral" | "decline" | "spam";
 
+export type TargetSource = "manual" | "agent_discovered" | "import";
+
 export interface Target {
   id: string;
   name: string;
@@ -273,6 +285,8 @@ export interface Target {
   channel: string;
   score: number | null;
   notes: string;
+  source: TargetSource;
+  created_by_run_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -378,9 +392,9 @@ export async function createTarget(target: Omit<Target, "id" | "created_at" | "u
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await db.execute({
-    sql: `INSERT INTO targets (id, name, type, status, priority, channel, score, notes, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, target.name, target.type, target.status, target.priority, target.channel, target.score, target.notes, now, now],
+    sql: `INSERT INTO targets (id, name, type, status, priority, channel, score, notes, source, created_by_run_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, target.name, target.type, target.status, target.priority, target.channel, target.score, target.notes, target.source || "manual", target.created_by_run_id || null, now, now],
   });
   const result = await db.execute({ sql: "SELECT * FROM targets WHERE id = ?", args: [id] });
   return rowToTarget(result.rows[0] as unknown as Record<string, unknown>);

@@ -6,6 +6,7 @@ import {
   updateTarget,
   createThread,
   insertMessages,
+  logActivity,
   type Lane,
 } from "../../db";
 import { askClaude } from "../../claude";
@@ -160,6 +161,7 @@ registerTool<OutreachInput, OutreachOutput>({
 
     // Update target status
     await updateTarget(input.targetId, { status: "drafted" });
+    logActivity({ target_id: input.targetId, action: "outreach_generated", details: `Agent generated ${results.length} lanes of outreach (${allWarnings.length} warnings)` }).catch(() => {});
 
     return {
       success: true,

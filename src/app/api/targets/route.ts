@@ -37,6 +37,8 @@ export async function POST(request: Request) {
     channel: body.channel || "",
     score: body.score || null,
     notes: body.notes || "",
+    source: body.source || "manual",
+    created_by_run_id: body.created_by_run_id || null,
   };
 
   try {

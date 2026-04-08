@@ -8,3 +8,4 @@ export { emitSignal } from "./signals";
 export { createGate, resolveGate, checkExpiredGates } from "./gates";
 export { runAdaptation } from "./adaptation";
 export { assignExperiment, analyzeExperiment } from "./experiments";
+export { evaluateRun, selfCritique, midRunCheckIn } from "./evaluator";

@@ -1,8 +1,8 @@
 import { registerTool } from "../registry";
 import { searchText } from "../../search-providers";
 import { askClaude } from "../../claude";
-import { createTarget } from "../../db";
-import type { ToolResult } from "../types";
+import { createTarget, logActivity } from "../../db";
+import type { ToolResult, ToolContext } from "../types";
 
 interface DiscoverAndAddInput {
   query: string;
@@ -38,7 +38,7 @@ registerTool<DiscoverAndAddInput, DiscoverAndAddOutput>({
     required: ["query"],
   },
   timeout: 40000,
-  async execute(input): Promise<ToolResult<DiscoverAndAddOutput>> {
+  async execute(input, context): Promise<ToolResult<DiscoverAndAddOutput>> {
     const maxTargets = input.maxTargets || 5;
     const targetType = input.targetType || "celebrity";
     const searchQuery = `Find golf influencers, celebrities, or podcast hosts matching: ${input.query}. Include their name, a one-line description, and why they'd be a good networking target for a $120M golf technology company. List up to ${maxTargets} people.`;
@@ -85,6 +85,8 @@ Respond with JSON array only.`;
           channel: "",
           score: null,
           notes: p.description || "",
+          source: "agent_discovered",
+          created_by_run_id: context.runId || null,
         });
         addedTargets.push({
           id: target.id,
@@ -92,6 +94,11 @@ Respond with JSON array only.`;
           type: target.type,
           description: p.description || "",
         });
+        logActivity({
+          target_id: target.id,
+          action: "target_created",
+          details: `Agent discovered via "${input.query}" (run: ${context.runId})`,
+        }).catch(() => {});
       } catch { /* skip duplicates or errors */ }
     }
 

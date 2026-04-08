@@ -588,6 +588,11 @@ function TargetRow({
         >
           {target.type}
         </span>
+        {(target as Target & { source?: string }).source === "agent_discovered" && (
+          <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded bg-primary/15 text-primary shrink-0" title="Discovered by agent">
+            AI
+          </span>
+        )}
         {target.score !== null && (
           <span className="text-[10px] font-bold text-warning shrink-0">
             {target.score}

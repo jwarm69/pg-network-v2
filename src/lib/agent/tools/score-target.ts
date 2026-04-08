@@ -1,5 +1,5 @@
 import { registerTool } from "../registry";
-import { getTarget, updateTarget, getResearch } from "../../db";
+import { getTarget, updateTarget, getResearch, logActivity } from "../../db";
 import { calculateScore, type ScoreResult } from "../../scoring";
 import { askClaude } from "../../claude";
 import type { ToolResult, ToolContext } from "../types";
@@ -89,6 +89,7 @@ Respond with JSON only: { "reach": N, "relevance": N, "reachability": N, "angleS
 
     // Save score to target
     await updateTarget(input.targetId, { score: scoreResult.score });
+    logActivity({ target_id: input.targetId, action: "target_scored", details: `Score: ${scoreResult.score} (${scoreResult.band} — ${scoreResult.action})` }).catch(() => {});
 
     // Auto-chain to outreach if score is high enough
     const shouldChain = scoreResult.score >= 55;
