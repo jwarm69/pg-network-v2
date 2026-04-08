@@ -9,6 +9,7 @@ import {
   createToolCall,
   updateToolCall,
   createApprovalGate,
+  getAllLearnedPreferences,
 } from "../db-agent";
 import { buildOperationalMemory, serializeMemoryForPrompt, buildLearningContext } from "./memory";
 import { createAgentPlan } from "./planner";
@@ -23,7 +24,9 @@ import type {
   ToolContext,
   LearnedPreference,
 } from "./types";
-import { getAllLearnedPreferences } from "../db-agent";
+
+// Time budget: stop looping if we've used more than 50s of the ~60s Vercel limit
+const TIME_BUDGET_MS = 50_000;
 
 // ─── Start a new agent run ───
 
@@ -34,6 +37,8 @@ export async function executeAgentRun(params: {
   parentRunId?: string;
 }): Promise<{ runId: string; status: string; gateId?: string }> {
   ensureToolsRegistered();
+  const startTime = Date.now();
+
   const run = await createAgentRun(params);
 
   await updateAgentRun(run.id, {
@@ -60,14 +65,42 @@ export async function executeAgentRun(params: {
     reasoning: plan.reasoning,
   });
 
-  // Execute first step
-  return executeNextStep(run.id);
+  // Run the loop in-process with time budget
+  return runLoop(run.id, startTime);
 }
 
-// ─── Execute the next step in a run ───
+// ─── In-process loop with time budget ───
 
-export async function executeNextStep(runId: string): Promise<{ runId: string; status: string; gateId?: string }> {
-  ensureToolsRegistered();
+async function runLoop(
+  runId: string,
+  startTime: number
+): Promise<{ runId: string; status: string; gateId?: string }> {
+  while (true) {
+    // Check time budget
+    const elapsed = Date.now() - startTime;
+    if (elapsed > TIME_BUDGET_MS) {
+      // Out of time — mark as needing continuation
+      await updateAgentRun(runId, {
+        status: "executing",
+        error: `Paused after ${Math.round(elapsed / 1000)}s — will resume on next tick`,
+      });
+      return { runId, status: "executing" };
+    }
+
+    const result = await executeOneStep(runId);
+
+    // If completed, failed, cancelled, or awaiting approval — stop
+    if (result.status !== "executing") {
+      return result;
+    }
+
+    // Otherwise loop to the next step
+  }
+}
+
+// ─── Execute a single step ───
+
+async function executeOneStep(runId: string): Promise<{ runId: string; status: string; gateId?: string }> {
   const run = await getAgentRun(runId);
   if (!run) throw new Error(`Run ${runId} not found`);
 
@@ -174,8 +207,12 @@ export async function executeNextStep(runId: string): Promise<{ runId: string; s
     stepIndex: currentStepIndex + 2,
     type: "observe",
     inputJson: JSON.stringify({ toolName: decision.toolName }),
-    outputJson: JSON.stringify(result),
+    outputJson: JSON.stringify({ success: result.success, error: result.error }),
+    reasoning: result.success
+      ? `Tool ${decision.toolName} succeeded`
+      : `Tool ${decision.toolName} failed: ${result.error}`,
     tokensUsed: result.metadata?.tokensUsed || 0,
+    durationMs,
   });
 
   // Update token count
@@ -183,13 +220,21 @@ export async function executeNextStep(runId: string): Promise<{ runId: string; s
     tokens_used: run.tokens_used + (result.metadata?.tokensUsed || 0),
   });
 
-  // Return status for continuation
+  // Signal: keep executing
   return { runId, status: "executing" };
+}
+
+// ─── Continue a paused/stalled run (called by cron or continue route) ───
+
+export async function executeNextStep(runId: string): Promise<{ runId: string; status: string; gateId?: string }> {
+  ensureToolsRegistered();
+  return runLoop(runId, Date.now());
 }
 
 // ─── Resume after approval gate ───
 
 export async function resumeAfterApproval(gateId: string, action: "approved" | "rejected" | "edited", edits?: Record<string, unknown>): Promise<{ runId: string; status: string }> {
+  ensureToolsRegistered();
   const resolved = await resolveGate(gateId, action, edits);
   const run = await getAgentRun(resolved.runId);
   if (!run) throw new Error(`Run ${resolved.runId} not found`);
@@ -255,8 +300,8 @@ export async function resumeAfterApproval(gateId: string, action: "approved" | "
     durationMs: result.metadata?.durationMs,
   });
 
-  // Continue the run
-  return executeNextStep(run.id);
+  // Continue the loop
+  return runLoop(run.id, Date.now());
 }
 
 // ─── Think step: decide next action ───
@@ -276,8 +321,12 @@ async function think(
   const observations = previousSteps
     .filter((s) => s.type === "observe" || s.type === "think")
     .map((s) => {
-      const output = s.output_json ? JSON.parse(s.output_json) : {};
-      return `[${s.type}] ${s.reasoning || ""} ${output.success !== undefined ? (output.success ? "SUCCESS" : "FAILED: " + output.error) : ""}`;
+      try {
+        const output = s.output_json ? JSON.parse(s.output_json) : {};
+        return `[${s.type}] ${s.reasoning || ""} ${output.success !== undefined ? (output.success ? "SUCCESS" : "FAILED: " + output.error) : ""}`;
+      } catch {
+        return `[${s.type}] ${s.reasoning || ""}`;
+      }
     })
     .join("\n");
 
@@ -336,7 +385,7 @@ async function completeRun(run: AgentRun, outcome?: string): Promise<{ runId: st
   return { runId: run.id, status: "completed" };
 }
 
-// ─── Self-continuation for Vercel ───
+// ─── Self-continuation for Vercel (kept as fallback) ───
 
 export async function triggerContinuation(runId: string): Promise<void> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
