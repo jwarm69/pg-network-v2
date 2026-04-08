@@ -225,6 +225,8 @@ If a field is unknown, use "UNKNOWN -- [describe what's missing]".`;
         gapsFilled: gaps,
         sourcesCount: allCitations.length,
       },
+      nextStepHint: "score_target",
+      nextStepInput: { targetId: input.targetId },
     };
   },
 });

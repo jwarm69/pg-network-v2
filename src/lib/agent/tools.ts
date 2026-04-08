@@ -21,6 +21,9 @@ export function ensureToolsRegistered(): void {
   require("./tools/check-replies");
   require("./tools/update-target");
   require("./tools/get-pipeline-status");
+  require("./tools/discover-and-add");
+  require("./tools/research-batch");
+  require("./tools/process-pipeline");
 }
 
 // ─── Tool Executor ───

@@ -90,6 +90,9 @@ Respond with JSON only: { "reach": N, "relevance": N, "reachability": N, "angleS
     // Save score to target
     await updateTarget(input.targetId, { score: scoreResult.score });
 
+    // Auto-chain to outreach if score is high enough
+    const shouldChain = scoreResult.score >= 55;
+
     return {
       success: true,
       data: {
@@ -97,6 +100,10 @@ Respond with JSON only: { "reach": N, "relevance": N, "reachability": N, "angleS
         dimensions: dimensions!,
         adjustments,
       },
+      ...(shouldChain ? {
+        nextStepHint: "generate_outreach",
+        nextStepInput: { targetId: input.targetId },
+      } : {}),
     };
   },
 });

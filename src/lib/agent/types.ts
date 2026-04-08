@@ -208,6 +208,8 @@ export interface ToolResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  nextStepHint?: string;
+  nextStepInput?: Record<string, unknown>;
   metadata?: {
     tokensUsed?: number;
     durationMs?: number;
@@ -260,6 +262,7 @@ export interface AgentPlan {
   reasoning: string;
   steps: PlannedStep[];
   maxSteps: number;
+  subgoals?: SubGoal[];
 }
 
 // ─── Agent Decision (from think step) ───
@@ -270,4 +273,26 @@ export interface AgentDecision {
   input?: Record<string, unknown>;
   reasoning: string;
   outcome?: string;
+  workingNotes?: string;
+}
+
+// ─── Run Scratchpad ───
+
+export interface RunScratchpad {
+  discoveredTargets: Array<{ name: string; id?: string }>;
+  completedSteps: string[];
+  lastToolResult: unknown;
+  workingNotes: string;
+  targetQueue: string[];
+  currentSubgoalIndex: number;
+}
+
+// ─── Sub-Goals ───
+
+export interface SubGoal {
+  id: string;
+  description: string;
+  status: "pending" | "active" | "completed" | "failed";
+  toolSequence: string[];
+  targetIds?: string[];
 }

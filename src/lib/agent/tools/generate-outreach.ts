@@ -80,45 +80,50 @@ registerTool<OutreachInput, OutreachOutput>({
     }
 
     const lanes = input.lanes || ["direct", "agent", "wildcard"] as Lane[];
-    const results: GeneratedLane[] = [];
     const allWarnings: string[] = [];
 
-    for (const lane of lanes) {
-      const lanePrompt = buildLanePrompt(target.name, lane, fieldMap, contactPaths, angle);
+    // Generate all lanes in parallel
+    const laneResults = await Promise.all(
+      lanes.map(async (lane) => {
+        const lanePrompt = buildLanePrompt(target.name, lane, fieldMap, contactPaths, angle);
 
-      const generated = await askClaude(lanePrompt, {
-        system: buildBrandDnaPrompt(),
-        maxTokens: 2500,
-        temperature: 0.7,
-      });
+        const generated = await askClaude(lanePrompt, {
+          system: buildBrandDnaPrompt(),
+          maxTokens: 2500,
+          temperature: 0.7,
+        });
 
-      let messages: Array<{ sequence: number; subject: string; body: string }>;
-      try {
-        messages = JSON.parse(generated);
-        if (!Array.isArray(messages)) messages = [];
-      } catch {
-        // Try to extract from fenced code block
-        const match = generated.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (match) {
-          try { messages = JSON.parse(match[1]); } catch { messages = []; }
-        } else {
-          messages = [];
-        }
-      }
-
-      // Validate each message
-      const warnings: string[] = [];
-      for (const msg of messages) {
-        const validation = validateMessage(msg.body, lane === "direct" ? "email" : "dm");
-        if (!validation.valid) {
-          for (const v of validation.violations) {
-            warnings.push(`M${msg.sequence}: ${v.rule} - ${v.detail}`);
+        let messages: Array<{ sequence: number; subject: string; body: string }>;
+        try {
+          messages = JSON.parse(generated);
+          if (!Array.isArray(messages)) messages = [];
+        } catch {
+          const match = generated.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (match) {
+            try { messages = JSON.parse(match[1]); } catch { messages = []; }
+          } else {
+            messages = [];
           }
         }
-      }
 
-      // Find appropriate contact path
-      const path = contactPaths.find((p) => p.type === lane) || contactPaths[0];
+        const warnings: string[] = [];
+        for (const msg of messages) {
+          const validation = validateMessage(msg.body, lane === "direct" ? "email" : "dm");
+          if (!validation.valid) {
+            for (const v of validation.violations) {
+              warnings.push(`M${msg.sequence}: ${v.rule} - ${v.detail}`);
+            }
+          }
+        }
+
+        const path = contactPaths.find((p) => p.type === lane) || contactPaths[0];
+        return { lane, messages, warnings, path };
+      })
+    );
+
+    const results: GeneratedLane[] = [];
+
+    for (const { lane, messages, warnings, path } of laneResults) {
 
       // Create thread in DB
       const thread = await createThread({

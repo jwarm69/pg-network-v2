@@ -7,7 +7,7 @@ import {
   getActivity,
 } from "../db";
 import { getRecentAgentRuns, getAllLearnedPreferences } from "../db-agent";
-import type { OperationalMemory, LearnedPreference } from "./types";
+import type { OperationalMemory, LearnedPreference, RunScratchpad } from "./types";
 
 export async function buildOperationalMemory(targetId?: string): Promise<OperationalMemory> {
   if (!targetId) {
@@ -94,6 +94,50 @@ export function serializeMemoryForPrompt(memory: OperationalMemory): string {
   }
 
   return sections.join("\n");
+}
+
+export function serializeScratchpad(scratchpad: RunScratchpad): string {
+  const sections: string[] = ["\n--- WORKING MEMORY (this run) ---"];
+
+  if (scratchpad.completedSteps.length > 0) {
+    sections.push("\nCOMPLETED STEPS:");
+    for (const step of scratchpad.completedSteps) {
+      sections.push(`  - ${step}`);
+    }
+  }
+
+  if (scratchpad.discoveredTargets.length > 0) {
+    sections.push("\nDISCOVERED TARGETS:");
+    for (const t of scratchpad.discoveredTargets) {
+      sections.push(`  - ${t.name}${t.id ? ` (id: ${t.id})` : " (not yet added)"}`);
+    }
+  }
+
+  if (scratchpad.targetQueue.length > 0) {
+    sections.push(`\nTARGET QUEUE (${scratchpad.targetQueue.length} remaining): ${scratchpad.targetQueue.join(", ")}`);
+  }
+
+  if (scratchpad.workingNotes) {
+    sections.push(`\nWORKING NOTES: ${scratchpad.workingNotes}`);
+  }
+
+  if (scratchpad.lastToolResult) {
+    const resultStr = JSON.stringify(scratchpad.lastToolResult);
+    sections.push(`\nLAST TOOL RESULT: ${resultStr.slice(0, 1500)}`);
+  }
+
+  return sections.join("\n");
+}
+
+export function createEmptyScratchpad(): RunScratchpad {
+  return {
+    discoveredTargets: [],
+    completedSteps: [],
+    lastToolResult: null,
+    workingNotes: "",
+    targetQueue: [],
+    currentSubgoalIndex: 0,
+  };
 }
 
 export async function buildLearningContext(): Promise<string> {

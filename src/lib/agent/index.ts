@@ -1,7 +1,7 @@
 export * from "./types";
 export { registerTool, getTool, getAllTools, getToolsForPrompt } from "./registry";
 export { executeTool, ensureToolsRegistered } from "./tools";
-export { buildOperationalMemory, buildLearningContext } from "./memory";
+export { buildOperationalMemory, buildLearningContext, createEmptyScratchpad, serializeScratchpad } from "./memory";
 export { createAgentPlan } from "./planner";
 export { executeAgentRun, resumeAfterApproval, executeNextStep } from "./loop";
 export { emitSignal } from "./signals";
